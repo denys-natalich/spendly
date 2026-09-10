@@ -115,6 +115,17 @@
   /* Form controls inherit the page font — but from @layer base, so a text-*
      utility on the element still wins. */
   button, input, select, textarea { font: inherit; color: inherit; }
+
+  /* Safari on iOS zooms the page in whenever a focused field renders below
+     16px, and never zooms back out. Floor every control on a touch device;
+     the ones that carry a text-* utility opt in via pointer-coarse: instead. */
+  @media (pointer: coarse) {
+    input, select, textarea { font-size: 16px; }
+  }
+
+  /* Kills the double-tap-to-zoom gesture (and its 300ms tap delay) on the
+     things people tap repeatedly — category chips, the month stepper. */
+  button, a, label, [role="button"] { touch-action: manipulation; }
 }
 
 /* Money and dates line up column-wise only with tabular figures. */

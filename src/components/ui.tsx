@@ -52,8 +52,8 @@ export function Field({ label, hint, children }: { label: string; hint?: ReactNo
 
 /** Width is deliberately absent — set it at the call site. */
 export const inputClass =
-  'rounded-xl border border-line bg-raised px-3.5 py-2.5 text-sm text-ink placeholder:text-ink-3 ' +
-  'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30'
+  'rounded-xl border border-line bg-raised px-3.5 py-2.5 text-sm pointer-coarse:text-base text-ink ' +
+  'placeholder:text-ink-3 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30'
 
 export function Segmented<T extends string>({
   value, options, onChange, ariaLabel, compact,

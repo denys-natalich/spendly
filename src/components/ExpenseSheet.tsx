@@ -179,7 +179,7 @@ export function ExpenseSheet({ open, expense, onClose }: {
             max={today()}
             onChange={(e) => setSpentOn(e.target.value || today())}
             aria-label="Date"
-            className="tnum bg-transparent text-right text-sm text-ink focus:outline-none"
+            className="tnum bg-transparent text-right text-sm pointer-coarse:text-base text-ink focus:outline-none"
           />
         </div>
 
