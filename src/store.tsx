@@ -3,7 +3,7 @@ import {
   type ReactNode,
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
-import { supabase, isConfigured } from './lib/supabase'
+import { fetchAllPages, supabase, isConfigured } from './lib/supabase'
 import { backfillRates, ensureRatesFor, loadCachedRates, nearestKnown, rateToEur } from './lib/fx'
 import { makeConverter, type Convert } from './lib/convert'
 import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
@@ -122,17 +122,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       try {
         const [cats, exps, cachedRates] = await Promise.all([
           supabase.from('categories').select('*').order('sort_order').order('name'),
-          supabase.from('expenses').select('*').order('spent_on', { ascending: false }).order('created_at', { ascending: false }).limit(5000),
+          // Paged: a bulk import puts more rows here than one response can carry.
+          // `id` breaks ties so a row can't shift between pages and be missed —
+          // imported rows share a created_at down to the millisecond.
+          fetchAllPages<Record<string, unknown>>((from, to) =>
+            supabase
+              .from('expenses')
+              .select('*')
+              .order('spent_on', { ascending: false })
+              .order('created_at', { ascending: false })
+              .order('id')
+              .range(from, to),
+          ),
           loadCachedRates(),
         ])
         if (cats.error) throw cats.error
-        if (exps.error) throw exps.error
         if (cancelled) return
 
         const map = new Map(cachedRates.map((r) => [r.day, r]))
         const starter = cats.data?.length ? null : await seedDefaultCategories(userId)
         setCategories((starter ?? cats.data) as Category[])
-        setExpenses((exps.data ?? []).map(hydrateExpense))
+        setExpenses(exps.map(hydrateExpense))
         setRates(map)
         ratesRef.current = map
 

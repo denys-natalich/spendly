@@ -1,4 +1,4 @@
-import { supabase } from './supabase'
+import { fetchAllPages, supabase } from './supabase'
 import type { Currency, DayRates } from '../types'
 import { toISODate } from './format'
 
@@ -43,13 +43,13 @@ async function fetchFromFallback(isoDate: string): Promise<DayRates | null> {
 }
 
 export async function loadCachedRates(): Promise<DayRates[]> {
-  const { data, error } = await supabase
-    .from('fx_rates')
-    .select('day, usd, uah')
-    .order('day', { ascending: false })
-    .limit(800)
-  if (error) throw error
-  return (data ?? []).map((r) => ({ day: r.day, usd: Number(r.usd), uah: Number(r.uah) }))
+  // Every day an expense might fall on has to be here: a rate missing from this
+  // map sends conversion to the nearest day it does have, which for a 2021
+  // expense could be years off.
+  const rows = await fetchAllPages<{ day: string; usd: string; uah: string }>((from, to) =>
+    supabase.from('fx_rates').select('day, usd, uah').order('day', { ascending: false }).range(from, to),
+  )
+  return rows.map((r) => ({ day: r.day, usd: Number(r.usd), uah: Number(r.uah) }))
 }
 
 /**

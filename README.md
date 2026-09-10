@@ -162,6 +162,17 @@ Income rows and currencies other than EUR/USD/UAH are skipped and reported rathe
 
 ---
 
+## A note on PostgREST row limits
+
+Supabase caps every API response at a server-side row limit — 1000 by default. A client-side
+`.limit(5000)` does **not** raise it: the response is silently truncated, with no error and no
+indication that anything is missing. After importing five years of history that showed up as the
+app appearing to lose everything older than its newest thousand rows.
+
+Anything that can exceed the cap therefore pages through `.range()` — see `fetchAllPages` in
+`lib/supabase.ts`. Paged queries order by `id` last, so rows sharing a `spent_on` and `created_at`
+(as bulk-imported rows do, to the millisecond) can't shift between pages and be skipped.
+
 ## How currency conversion works
 
 Rates come from the [National Bank of Ukraine](https://bank.gov.ua) — official, free, no API key,
