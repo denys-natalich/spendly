@@ -5,9 +5,14 @@ import { useTheme, type ThemeChoice } from '../lib/theme'
 import { totalEur } from '../lib/analytics'
 import { money } from '../lib/format'
 import { BASE_CURRENCY } from '../types'
+import { LockSettings } from './LockSettings'
 import { Button, Card, SectionTitle, Segmented } from './ui'
 
-export function Settings() {
+export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
+  lockEnabled: boolean
+  onEnableLock: () => void
+  onDisableLock: () => void
+}) {
   const { session, signOut, expenses, categories, latestRates } = useStore()
   const [theme, setTheme] = useTheme()
   const [busy, setBusy] = useState(false)
@@ -48,6 +53,8 @@ export function Settings() {
           />
         </Card>
       </section>
+
+      <LockSettings enabled={lockEnabled} onEnable={onEnableLock} onDisable={onDisableLock} />
 
       <section>
         <SectionTitle>Exchange rates</SectionTitle>

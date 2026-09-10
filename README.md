@@ -7,7 +7,7 @@ everything is reported in **euro** using the official rate from the day the expe
   ranked breakdown, and a 12-month trend.
 - **Expenses** — day-grouped list with search and category filter; tap any row to edit or delete.
 - **Categories** — eight to start with; add your own with an icon and a colour.
-- **Settings** — theme (system / light / dark), today's rates, account.
+- **Settings** — app lock, theme (system / light / dark), today's rates, account.
 
 Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + magic-link auth), `vite-plugin-pwa`.
 
@@ -47,20 +47,40 @@ VITE_SUPABASE_ANON_KEY=your-anon-public-key
 
 The anon key is safe to ship in a client bundle — row level security is what protects your data.
 
-### 4. Allow the sign-in redirect
+### 4. Switch the sign-in email to a code
 
-Under **Authentication → URL Configuration**, add your dev and production origins to
-*Redirect URLs* (e.g. `http://localhost:5173` and `https://your-app.vercel.app`).
-Without this the magic link bounces.
+Sign-in uses a **6-digit code**, not a magic link. Under **Authentication → Emails → Magic Link**,
+replace the template body with something that includes `{{ .Token }}`:
 
-### 5. Run it
+```html
+<h2>Your Spendly code</h2>
+<p style="font-size:28px;letter-spacing:6px"><strong>{{ .Token }}</strong></p>
+<p>It expires in an hour. If you didn't ask for it, ignore this email.</p>
+```
+
+Two reasons this beats a link. Mail providers pre-fetch links to scan them, which spends the
+single-use token before you ever click it — the `otp_expired` error. And on iOS a link always opens
+in the browser, never in an installed home-screen app, so the session would land in the wrong
+storage and the installed app would stay signed out.
+
+### 5. Allow the sign-in origins
+
+Under **Authentication → URL Configuration**:
+
+- **Site URL** → your production URL
+- **Redirect URLs** → add `http://localhost:5173/**` for local development
+
+Codes don't strictly need a redirect entry, but Supabase falls back to Site URL for anything
+link-shaped, so it's worth setting correctly.
+
+### 6. Run it
 
 ```bash
 npm install
 npm run dev
 ```
 
-Open the URL it prints, enter your email, and click the link Supabase sends you. The first sign-in
+Open the URL it prints, enter your email, and type the code Supabase sends you. The first sign-in
 creates a starter set of categories automatically.
 
 ---
@@ -82,7 +102,27 @@ runs full-screen with its own icon and works offline for browsing already-loaded
 worker keeps the app shell cached; new expenses still need a connection.
 
 > iOS only offers "Add to Home Screen" over HTTPS, so install from the deployed URL rather than
-> `localhost`.
+> `localhost`. An installed web app has its own storage, separate from Safari's — so sign in once
+> from inside the installed app, not before installing. It also escapes Safari's seven-day storage
+> eviction, which is why installing keeps you signed in and bookmarking doesn't.
+
+---
+
+## App lock
+
+Optional, per device, set up in **Settings → App lock**. Once on, the app covers itself whenever it
+leaves the foreground and needs Face ID (or a 4-digit PIN) to come back.
+
+Face ID goes through WebAuthn: a platform credential is registered on the device, and unlocking
+requires the browser to produce an assertion — which it will not do without a successful biometric
+or device-passcode check. The signature isn't verified server-side, because there's no server-side
+secret behind the gate.
+
+**What it is and isn't.** It's a privacy curtain: it stops someone holding your unlocked phone from
+reading your finances. It does not encrypt the Supabase session, so an attacker with developer tools
+on an unlocked device could get past it. On iOS, where an installed web app has neither an address
+bar nor an inspector, that's a high bar. The PIN is stored only as a PBKDF2-SHA256 hash with a random
+salt, never transmitted. Forgetting it costs you a sign-out and one email code.
 
 ---
 

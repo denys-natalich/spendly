@@ -1,10 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ChartPie, ListPlus, Plus, Settings as SettingsIcon, Tag, Wallet } from 'lucide-react'
 import { isConfigured } from './lib/supabase'
+import { useAppLock } from './lib/useAppLock'
+import { lockPromptSeen, markLockPromptSeen } from './lib/lock'
 import { useStore } from './store'
 import { Categories } from './components/Categories'
 import { Expenses } from './components/Expenses'
 import { ExpenseSheet } from './components/ExpenseSheet'
+import { LockScreen } from './components/LockScreen'
+import { LockSetupSheet } from './components/LockSettings'
 import { Login } from './components/Login'
 import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
@@ -26,10 +30,18 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('overview')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
+  const lock = useAppLock(Boolean(session))
+  const [lockPrompt, setLockPrompt] = useState(false)
+
+  // Offer the lock once, the first time this device has a signed-in session.
+  useEffect(() => {
+    if (session && !lock.enabled && !lockPromptSeen()) setLockPrompt(true)
+  }, [session, lock.enabled])
 
   if (!isConfigured) return <Setup />
   if (authLoading) return <div className="min-h-dvh"><Spinner label="Checking your session" /></div>
   if (!session) return <Login />
+  if (lock.locked) return <LockScreen onUnlock={lock.unlock} />
 
   function openNew() {
     setEditing(null)
@@ -96,7 +108,13 @@ export default function App() {
               {tab === 'overview' && <Overview onAdd={openNew} />}
               {tab === 'expenses' && <Expenses onEdit={openEdit} onAdd={openNew} />}
               {tab === 'categories' && <Categories />}
-              {tab === 'settings' && <Settings />}
+              {tab === 'settings' && (
+                <Settings
+                  lockEnabled={lock.enabled}
+                  onEnableLock={lock.enable}
+                  onDisableLock={lock.disable}
+                />
+              )}
             </>
           )}
         </main>
@@ -139,6 +157,12 @@ export default function App() {
       </nav>
 
       <ExpenseSheet open={sheetOpen} expense={editing} onClose={() => setSheetOpen(false)} />
+
+      <LockSetupSheet
+        open={lockPrompt}
+        onClose={() => { markLockPromptSeen(); setLockPrompt(false) }}
+        onEnabled={lock.enable}
+      />
     </div>
   )
 }

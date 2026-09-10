@@ -17,7 +17,8 @@ interface Store {
   expenses: Expense[]
   rates: Map<string, DayRates>
   latestRates: DayRates | null
-  signIn: (email: string) => Promise<void>
+  sendCode: (email: string) => Promise<void>
+  verifyCode: (email: string, code: string) => Promise<void>
   signOut: () => Promise<void>
   addExpense: (draft: ExpenseDraft) => Promise<void>
   updateExpense: (id: string, draft: ExpenseDraft) => Promise<void>
@@ -179,11 +180,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setExpenses((prev) => prev.map((e) => (e.category_id === id ? { ...e, category_id: null } : e)))
   }, [])
 
-  const signIn = useCallback(async (email: string) => {
-    const { error: err } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
-    })
+  /*
+   * Six-digit code rather than a magic link. Two reasons: mail providers
+   * pre-fetch links to scan them, which burns the single-use token before the
+   * human clicks it; and on iOS a link always opens in the browser, never in an
+   * installed home-screen app, so the session would land in the wrong storage.
+   * Omitting emailRedirectTo is what makes Supabase send the token, not a URL.
+   */
+  const sendCode = useCallback(async (email: string) => {
+    const { error: err } = await supabase.auth.signInWithOtp({ email })
+    if (err) throw err
+  }, [])
+
+  const verifyCode = useCallback(async (email: string, code: string) => {
+    const { error: err } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' })
     if (err) throw err
   }, [])
 
@@ -195,7 +205,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value: Store = {
     session, authLoading, loading, error, categories, expenses, rates, latestRates,
-    signIn, signOut, addExpense, updateExpense, deleteExpense,
+    sendCode, verifyCode, signOut, addExpense, updateExpense, deleteExpense,
     addCategory, updateCategory, deleteCategory,
   }
 
