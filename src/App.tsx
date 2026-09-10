@@ -7,6 +7,7 @@ import { useStore } from './store'
 import { Categories } from './components/Categories'
 import { Expenses } from './components/Expenses'
 import { ExpenseSheet } from './components/ExpenseSheet'
+import { Avatar } from './components/Avatar'
 import { LockScreen } from './components/LockScreen'
 import { LockSetupSheet } from './components/LockSettings'
 import { Login } from './components/Login'
@@ -63,7 +64,15 @@ export default function App() {
           <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent text-accent-in">
             <Wallet size={16} />
           </span>
-          <span className="font-semibold">Spendly</span>
+          <span className="flex-1 font-semibold">Spendly</span>
+          <button
+            type="button"
+            onClick={() => setTab('settings')}
+            aria-label="Account settings"
+            className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <Avatar size={28} />
+          </button>
         </div>
         <nav className="space-y-1">
           {TABS.map(({ id, label, icon: Icon }) => (
@@ -93,8 +102,17 @@ export default function App() {
 
       <div className="min-w-0 flex-1">
         {/* Mobile header */}
-        <header className="sticky top-0 z-30 border-b border-line bg-bg/85 px-5 py-3.5 backdrop-blur md:hidden">
+        <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line
+                           bg-bg/85 px-5 py-3 backdrop-blur md:hidden">
           <h1 className="text-base font-semibold">{current.label}</h1>
+          <button
+            type="button"
+            onClick={() => setTab('settings')}
+            aria-label="Account settings"
+            className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+          >
+            <Avatar size={32} />
+          </button>
         </header>
 
         <main className="mx-auto w-full max-w-2xl px-4 pt-4 pb-28 md:px-8 md:pt-8 md:pb-12 lg:max-w-4xl">

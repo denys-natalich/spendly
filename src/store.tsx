@@ -6,6 +6,7 @@ import type { Session } from '@supabase/supabase-js'
 import { fetchAllPages, supabase, isConfigured } from './lib/supabase'
 import { backfillRates, ensureRatesFor, loadCachedRates, nearestKnown, rateToEur } from './lib/fx'
 import { makeConverter, type Convert } from './lib/convert'
+import { getAvatarUrl, removeAvatar, uploadAvatar } from './lib/avatar'
 import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
 import { today } from './lib/format'
 import { BASE_CURRENCY, CURRENCIES } from './types'
@@ -24,6 +25,9 @@ interface Store {
   displayCurrency: Currency
   setDisplayCurrency: (c: Currency) => void
   convert: Convert
+  avatarUrl: string | null
+  setAvatar: (file: File) => Promise<void>
+  clearAvatar: () => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
   setPassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -83,6 +87,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [rates, setRates] = useState<Map<string, DayRates>>(new Map())
   const [displayCurrency, setDisplayCurrencyState] = useState<Currency>(readDisplayCurrency)
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   // Mutations resolve rates against the freshest map without re-creating every
   // callback on each rate fetch. Mirrored in an effect rather than during render;
@@ -112,8 +117,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (!userId) {
       setCategories([])
       setExpenses([])
+      setAvatarUrl(null)
       return
     }
+
+    // Absent avatar simply resolves to null, so no error handling is needed.
+    void getAvatarUrl(userId).then((url) => setAvatarUrl(url))
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -364,6 +373,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const latestRates = useMemo(() => nearestKnown(today(), rates), [rates])
 
+  const setAvatar = useCallback(async (file: File) => {
+    if (!userId) return
+    setAvatarUrl(await uploadAvatar(userId, file))
+  }, [userId])
+
+  const clearAvatar = useCallback(async () => {
+    if (!userId) return
+    await removeAvatar(userId)
+    setAvatarUrl(null)
+  }, [userId])
+
   const setDisplayCurrency = useCallback((c: Currency) => {
     setDisplayCurrencyState(c)
     try { localStorage.setItem(DISPLAY_KEY, c) } catch { /* private mode — session only */ }
@@ -374,6 +394,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Store = {
     session, authLoading, loading, error, categories, expenses, rates, latestRates,
     displayCurrency, setDisplayCurrency, convert,
+    avatarUrl, setAvatar, clearAvatar,
     signIn, setPassword, signOut, addExpense, updateExpense, deleteExpense,
     addCategory, updateCategory, deleteCategory, importExpenses,
   }

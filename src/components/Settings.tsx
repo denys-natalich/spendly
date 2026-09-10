@@ -5,6 +5,7 @@ import { useTheme, type ThemeChoice } from '../lib/theme'
 import { total } from '../lib/analytics'
 import { money } from '../lib/format'
 import { BASE_CURRENCY } from '../types'
+import { AvatarSettings } from './AvatarSettings'
 import { ImportSettings } from './ImportSettings'
 import { LockSettings } from './LockSettings'
 import { PasswordSettings } from './PasswordSettings'
@@ -15,7 +16,7 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
   onEnableLock: () => void
   onDisableLock: () => void
 }) {
-  const { session, signOut, expenses, categories, latestRates, convert, displayCurrency } = useStore()
+  const { signOut, expenses, categories, latestRates, convert, displayCurrency } = useStore()
   const [theme, setTheme] = useTheme()
   const [busy, setBusy] = useState(false)
 
@@ -24,8 +25,8 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
       <section>
         <SectionTitle>Account</SectionTitle>
         <Card className="divide-y divide-line">
-          <Row label="Signed in as" value={session?.user.email ?? '—'} />
-          <Row label="Reporting currency" value={BASE_CURRENCY} />
+          <AvatarSettings />
+          <Row label="Stored in" value={BASE_CURRENCY} />
           <div className="p-4">
             <Button
               variant="subtle"

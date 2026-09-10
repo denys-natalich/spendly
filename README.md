@@ -8,7 +8,7 @@ read back in any of the three currencies from a switch on the overview.
   ranked breakdown, and a 12-month trend. A €/$/₴ switch restates every figure on the screen.
 - **Expenses** — day-grouped list with search and category filter; tap any row to edit or delete.
 - **Categories** — eight to start with; add your own with an icon and a colour.
-- **Settings** — password, app lock, Monefy import, theme (system / light / dark), today's rates, account.
+- **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, account.
 
 Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password auth), `vite-plugin-pwa`.
 
@@ -68,14 +68,20 @@ A password is typed inside the app, on the device that needs the session, with n
 If your account already exists without a password — created by magic link before the switch — sign
 in on a device that still has a live session and use **Settings → Password → Set a password**.
 
-### 5. Close the door
+### 5. Enable avatars (optional)
+
+Run [`supabase/avatars.sql`](supabase/avatars.sql) in the SQL editor. It creates a **private**
+storage bucket and scopes it to `<user-uuid>/avatar.jpg`, so each account can only reach its own
+file. Skip this and the app just shows initials instead of a photo — nothing else breaks.
+
+### 6. Close the door
 
 Once your account exists, turn off **Authentication → Sign In / Providers → Email → Allow new users
 to sign up**. Anyone can read the publishable key out of the deployed bundle; without this they can
 register against your project and burn its quota. Row level security keeps their data separate from
 yours either way.
 
-### 6. Run it
+### 7. Run it
 
 ```bash
 npm install
@@ -121,6 +127,18 @@ therefore reads as the hryvnia actually paid, rather than what that euro amount 
 currency moved. An expense already in the currency being displayed shows its stored amount
 untouched, since the euro figure is rounded to two decimals and a round trip would drift by a
 kopiyka.
+
+## Avatars
+
+Tap the circle in the top-right (mobile) or beside the wordmark (desktop) to jump to Settings, where
+a photo can be set. Photos are centre-cropped and scaled to 256px in the browser before upload, so a
+multi-megabyte phone picture becomes roughly 20 KB and the app never handles a full-resolution copy.
+
+The bucket is **private**. A face is personal, so it's served through a short-lived signed URL rather
+than a public path that anyone who learned the UUID could fetch. Storage policies key on the first
+path segment, which is the owner's user id.
+
+Without a photo, the app renders initials derived from the email address.
 
 ## App lock
 
@@ -203,6 +221,7 @@ src/
     icons.ts           category icon set + validated colour palette slots
     theme.ts           system / light / dark preference
     lock.ts            WebAuthn platform credential, device-local
+    avatar.ts          crop/scale, private-bucket upload, signed URL
     convert.ts         restates expenses in the display currency
     useAppLock.ts      locks on leaving the foreground
   components/
@@ -212,6 +231,7 @@ src/
     charts.tsx         donut + monthly trend (Recharts)
     ui.tsx             Card, Button, Field, Sheet, Segmented, …
 supabase/schema.sql    tables, RLS policies
+supabase/avatars.sql   private avatar bucket + storage policies
 ```
 
 ### Chart colours
