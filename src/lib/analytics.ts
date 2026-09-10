@@ -1,4 +1,5 @@
 import type { Category, Expense } from '../types'
+import type { Convert } from './convert'
 import { addMonths, monthKey } from './format'
 import { UNCATEGORISED_COLOR, slotColor } from './icons'
 import type { Slice, TrendPoint } from '../components/charts'
@@ -10,8 +11,8 @@ export function expensesInMonth(expenses: Expense[], key: string): Expense[] {
   return expenses.filter((e) => monthKey(e.spent_on) === key)
 }
 
-export function totalEur(expenses: Expense[]): number {
-  return expenses.reduce((sum, e) => sum + e.amount_eur, 0)
+export function total(expenses: Expense[], convert: Convert): number {
+  return expenses.reduce((sum, e) => sum + convert(e), 0)
 }
 
 export interface CategoryTotal {
@@ -23,7 +24,7 @@ export interface CategoryTotal {
 }
 
 /** Every category with spend, ranked. Colour follows the category, not the rank. */
-export function byCategory(expenses: Expense[], categories: Category[]): CategoryTotal[] {
+export function byCategory(expenses: Expense[], categories: Category[], convert: Convert): CategoryTotal[] {
   const index = new Map(categories.map((c) => [c.id, c]))
   const totals = new Map<string, CategoryTotal>()
 
@@ -37,7 +38,7 @@ export function byCategory(expenses: Expense[], categories: Category[]): Categor
       value: 0,
       count: 0,
     }
-    row.value += e.amount_eur
+    row.value += convert(e)
     row.count += 1
     totals.set(key, row)
   }
@@ -65,11 +66,16 @@ function stripCount({ key, name, value, color }: CategoryTotal): Slice {
 }
 
 /** A contiguous run of months ending at `endKey`, zero-filled so gaps show. */
-export function monthlyTrend(expenses: Expense[], endKey: string, months: number): TrendPoint[] {
+export function monthlyTrend(
+  expenses: Expense[],
+  endKey: string,
+  months: number,
+  convert: Convert,
+): TrendPoint[] {
   const sums = new Map<string, number>()
   for (const e of expenses) {
     const k = monthKey(e.spent_on)
-    sums.set(k, (sums.get(k) ?? 0) + e.amount_eur)
+    sums.set(k, (sums.get(k) ?? 0) + convert(e))
   }
   return Array.from({ length: months }, (_, i) => {
     const key = addMonths(endKey, i - months + 1)
@@ -77,7 +83,10 @@ export function monthlyTrend(expenses: Expense[], endKey: string, months: number
   })
 }
 
-export function groupByDay(expenses: Expense[]): Array<{ day: string; items: Expense[]; total: number }> {
+export function groupByDay(
+  expenses: Expense[],
+  convert: Convert,
+): Array<{ day: string; items: Expense[]; total: number }> {
   const days = new Map<string, Expense[]>()
   for (const e of expenses) {
     const list = days.get(e.spent_on)
@@ -86,5 +95,5 @@ export function groupByDay(expenses: Expense[]): Array<{ day: string; items: Exp
   }
   return [...days.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
-    .map(([day, items]) => ({ day, items, total: totalEur(items) }))
+    .map(([day, items]) => ({ day, items, total: total(items, convert) }))
 }

@@ -5,11 +5,11 @@ import { groupByDay } from '../lib/analytics'
 import { dayLabel, money } from '../lib/format'
 import { iconFor, slotColor } from '../lib/icons'
 import { UNCATEGORISED_COLOR } from '../lib/icons'
-import { BASE_CURRENCY, type Expense } from '../types'
+import type { Expense } from '../types'
 import { Card, EmptyState, inputClass } from './ui'
 
 export function Expenses({ onEdit, onAdd }: { onEdit: (e: Expense) => void; onAdd: () => void }) {
-  const { expenses, categories } = useStore()
+  const { expenses, categories, convert, displayCurrency } = useStore()
   const [query, setQuery] = useState('')
   const [categoryId, setCategoryId] = useState<string>('all')
 
@@ -25,7 +25,7 @@ export function Expenses({ onEdit, onAdd }: { onEdit: (e: Expense) => void; onAd
     })
   }, [expenses, query, categoryId, catIndex])
 
-  const days = useMemo(() => groupByDay(filtered), [filtered])
+  const days = useMemo(() => groupByDay(filtered, convert), [filtered, convert])
 
   return (
     <div className="space-y-4">
@@ -79,7 +79,7 @@ export function Expenses({ onEdit, onAdd }: { onEdit: (e: Expense) => void; onAd
           <section key={group.day}>
             <div className="mb-1.5 flex items-baseline justify-between px-1">
               <h3 className="text-xs font-semibold tracking-wide text-ink-2 uppercase">{dayLabel(group.day)}</h3>
-              <span className="tnum text-xs text-ink-3">{money(group.total, BASE_CURRENCY)}</span>
+              <span className="tnum text-xs text-ink-3">{money(group.total, displayCurrency)}</span>
             </div>
             <Card className="divide-y divide-line overflow-hidden">
               {group.items.map((e) => {
@@ -107,8 +107,10 @@ export function Expenses({ onEdit, onAdd }: { onEdit: (e: Expense) => void; onAd
                       <span className="tnum block text-sm font-semibold">
                         {money(e.amount, e.currency)}
                       </span>
-                      {e.currency !== BASE_CURRENCY && (
-                        <span className="tnum block text-xs text-ink-3">{money(e.amount_eur, BASE_CURRENCY)}</span>
+                      {e.currency !== displayCurrency && (
+                        <span className="tnum block text-xs text-ink-3">
+                          {money(convert(e), displayCurrency)}
+                        </span>
                       )}
                     </span>
                   </button>

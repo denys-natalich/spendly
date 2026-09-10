@@ -5,9 +5,11 @@ import {
 import type { Session } from '@supabase/supabase-js'
 import { supabase, isConfigured } from './lib/supabase'
 import { backfillRates, ensureRatesFor, loadCachedRates, nearestKnown, rateToEur } from './lib/fx'
+import { makeConverter, type Convert } from './lib/convert'
 import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
 import { today } from './lib/format'
-import type { Category, DayRates, Expense, ExpenseDraft } from './types'
+import { BASE_CURRENCY, CURRENCIES } from './types'
+import type { Category, Currency, DayRates, Expense, ExpenseDraft } from './types'
 
 interface Store {
   session: Session | null
@@ -18,6 +20,10 @@ interface Store {
   expenses: Expense[]
   rates: Map<string, DayRates>
   latestRates: DayRates | null
+  /** Currency every total and chart is shown in. Storage is always EUR-based. */
+  displayCurrency: Currency
+  setDisplayCurrency: (c: Currency) => void
+  convert: Convert
   signIn: (email: string, password: string) => Promise<void>
   setPassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
@@ -45,6 +51,18 @@ export interface ImportResult {
 
 const StoreContext = createContext<Store | null>(null)
 
+const DISPLAY_KEY = 'spendly.displayCurrency'
+
+function readDisplayCurrency(): Currency {
+  try {
+    const v = localStorage.getItem(DISPLAY_KEY)
+    if (v && (CURRENCIES as readonly string[]).includes(v)) return v as Currency
+  } catch {
+    /* ignore */
+  }
+  return BASE_CURRENCY
+}
+
 const numeric = (v: unknown) => Number(v ?? 0)
 
 function hydrateExpense(row: Record<string, unknown>): Expense {
@@ -64,6 +82,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [categories, setCategories] = useState<Category[]>([])
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [rates, setRates] = useState<Map<string, DayRates>>(new Map())
+  const [displayCurrency, setDisplayCurrencyState] = useState<Currency>(readDisplayCurrency)
 
   // Mutations resolve rates against the freshest map without re-creating every
   // callback on each rate fetch. Mirrored in an effect rather than during render;
@@ -335,8 +354,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const latestRates = useMemo(() => nearestKnown(today(), rates), [rates])
 
+  const setDisplayCurrency = useCallback((c: Currency) => {
+    setDisplayCurrencyState(c)
+    try { localStorage.setItem(DISPLAY_KEY, c) } catch { /* private mode — session only */ }
+  }, [])
+
+  const convert = useMemo(() => makeConverter(displayCurrency, rates), [displayCurrency, rates])
+
   const value: Store = {
     session, authLoading, loading, error, categories, expenses, rates, latestRates,
+    displayCurrency, setDisplayCurrency, convert,
     signIn, setPassword, signOut, addExpense, updateExpense, deleteExpense,
     addCategory, updateCategory, deleteCategory, importExpenses,
   }

@@ -3,22 +3,22 @@ import { Check, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { COLOR_SLOTS, ICON_KEYS, iconFor, slotColor } from '../lib/icons'
 import { money } from '../lib/format'
-import { totalEur } from '../lib/analytics'
-import { BASE_CURRENCY, type Category } from '../types'
+import { total } from '../lib/analytics'
+import type { Category } from '../types'
 import { Button, Card, Field, Sheet, inputClass } from './ui'
 
 export function Categories() {
-  const { categories, expenses } = useStore()
+  const { categories, expenses, convert, displayCurrency } = useStore()
   const [editing, setEditing] = useState<Category | null>(null)
   const [creating, setCreating] = useState(false)
 
   const spendByCategory = useMemo(() => {
     const map = new Map<string, number>()
     for (const c of categories) {
-      map.set(c.id, totalEur(expenses.filter((e) => e.category_id === c.id)))
+      map.set(c.id, total(expenses.filter((e) => e.category_id === c.id), convert))
     }
     return map
-  }, [categories, expenses])
+  }, [categories, expenses, convert])
 
   // Default new categories to the least-used hue so the donut stays readable.
   const suggestedSlot = useMemo(() => {
@@ -51,7 +51,7 @@ export function Categories() {
                   {c.is_archived && <span className="ml-2 text-xs font-normal text-ink-3">archived</span>}
                 </span>
                 <span className="tnum block text-xs text-ink-3">
-                  {money(spendByCategory.get(c.id) ?? 0, BASE_CURRENCY)} all time
+                  {money(spendByCategory.get(c.id) ?? 0, displayCurrency)} all time
                 </span>
               </span>
               <button

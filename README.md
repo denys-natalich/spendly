@@ -1,10 +1,11 @@
 # Spendly
 
 A multi-currency expense tracker, installable as a PWA. Log spending in **EUR, USD or UAH**;
-everything is reported in **euro** using the official rate from the day the expense happened.
+totals are held in **euro** using the official rate from the day the expense happened, and can be
+read back in any of the three currencies from a switch on the overview.
 
 - **Overview** — monthly total, month-over-month change, spend per day, a category donut with a
-  ranked breakdown, and a 12-month trend.
+  ranked breakdown, and a 12-month trend. A €/$/₴ switch restates every figure on the screen.
 - **Expenses** — day-grouped list with search and category filter; tap any row to edit or delete.
 - **Categories** — eight to start with; add your own with an icon and a colour.
 - **Settings** — password, app lock, Monefy import, theme (system / light / dark), today's rates, account.
@@ -110,21 +111,32 @@ worker keeps the app shell cached; new expenses still need a connection.
 
 ---
 
+## Reading totals in another currency
+
+The switch on the overview changes the currency every total, chart and axis is drawn in. Storage is
+unaffected — amounts are always held as entered, plus a euro figure derived from the day's rate.
+
+Conversion uses the rate from the day the money was spent, not today's. Hryvnia spending from 2021
+therefore reads as the hryvnia actually paid, rather than what that euro amount would buy after the
+currency moved. An expense already in the currency being displayed shows its stored amount
+untouched, since the euro figure is rounded to two decimals and a round trip would drift by a
+kopiyka.
+
 ## App lock
 
 Optional, per device, set up in **Settings → App lock**. Once on, the app covers itself whenever it
-leaves the foreground and needs Face ID (or a 4-digit PIN) to come back.
+leaves the foreground and needs Face ID to come back.
 
-Face ID goes through WebAuthn: a platform credential is registered on the device, and unlocking
-requires the browser to produce an assertion — which it will not do without a successful biometric
-or device-passcode check. The signature isn't verified server-side, because there's no server-side
-secret behind the gate.
+There is deliberately **no PIN**. WebAuthn is asked for `userVerification: 'required'`, so when
+biometrics fail the device offers its own passcode — a second secret of our own would only add a
+weaker path to the same door. A platform credential is registered on the device, and unlocking
+requires the browser to produce an assertion, which it will not do without a successful check. The
+signature isn't verified server-side, because there's no server-side secret behind the gate.
 
 **What it is and isn't.** It's a privacy curtain: it stops someone holding your unlocked phone from
 reading your finances. It does not encrypt the Supabase session, so an attacker with developer tools
 on an unlocked device could get past it. On iOS, where an installed web app has neither an address
-bar nor an inspector, that's a high bar. The PIN is stored only as a PBKDF2-SHA256 hash with a random
-salt, never transmitted. Forgetting it costs you a sign-out and one email code.
+bar nor an inspector, that's a high bar.
 
 ---
 
@@ -179,7 +191,8 @@ src/
     format.ts          money, date and month formatting
     icons.ts           category icon set + validated colour palette slots
     theme.ts           system / light / dark preference
-    lock.ts            PIN hashing + WebAuthn, device-local
+    lock.ts            WebAuthn platform credential, device-local
+    convert.ts         restates expenses in the display currency
     useAppLock.ts      locks on leaving the foreground
   components/
     Overview.tsx  Expenses.tsx  Categories.tsx  Settings.tsx

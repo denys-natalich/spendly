@@ -1,5 +1,10 @@
 /*
- * Device-local app lock.
+ * Device-local app lock — Face ID / Touch ID only.
+ *
+ * There is deliberately no PIN of our own. WebAuthn with
+ * `userVerification: 'required'` already falls back to the device passcode when
+ * biometrics fail, so a second secret would add a weaker path to the same door
+ * without adding any protection.
  *
  * This is a privacy curtain, not a vault. It stops someone holding your
  * unlocked phone from reading your finances; it does not encrypt the Supabase
@@ -7,26 +12,13 @@
  * past it. On iOS — where an installed web app has no address bar and no
  * inspector — that is a high bar, which is the trade this is built for.
  *
- * The Face ID path is WebAuthn: we register a platform credential and then
- * require a successful assertion to unlock. The signature is never checked
- * server-side, because there is no secret behind the gate to protect — the
- * point is that the browser will not produce an assertion at all without a
- * successful biometric or device-passcode check.
+ * The assertion is never verified server-side, because there is no secret
+ * behind the gate to protect. The point is that the browser will not produce an
+ * assertion at all without a successful biometric or passcode check.
  */
 
-const PIN_KEY = 'spendly.lock.pin'
 const CRED_KEY = 'spendly.lock.credential'
 const PROMPTED_KEY = 'spendly.lock.prompted'
-
-const ITERATIONS = 210_000
-
-export const PIN_LENGTH = 4
-
-interface PinRecord {
-  salt: string
-  hash: string
-  iterations: number
-}
 
 /* ---------- storage helpers (private browsing can throw on every access) ---- */
 
@@ -69,47 +61,15 @@ function fromB64(s: string): Uint8Array {
   return Uint8Array.from(bin, (c) => c.charCodeAt(0))
 }
 
-/* ---------- PIN ------------------------------------------------------------ */
-
-async function derive(pin: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits'])
-  const bits = await crypto.subtle.deriveBits(
-    { name: 'PBKDF2', salt: salt as BufferSource, iterations, hash: 'SHA-256' },
-    key,
-    256,
-  )
-  return toB64(bits)
-}
+/* ---------- lock state ----------------------------------------------------- */
 
 export function isLockEnabled(): boolean {
-  return read(PIN_KEY) !== null
-}
-
-export async function setPin(pin: string): Promise<void> {
-  const salt = crypto.getRandomValues(new Uint8Array(16))
-  const hash = await derive(pin, salt, ITERATIONS)
-  const record: PinRecord = { salt: toB64(salt.buffer as ArrayBuffer), hash, iterations: ITERATIONS }
-  write(PIN_KEY, JSON.stringify(record))
-}
-
-export async function verifyPin(pin: string): Promise<boolean> {
-  const raw = read(PIN_KEY)
-  if (!raw) return false
-  try {
-    const record = JSON.parse(raw) as PinRecord
-    const hash = await derive(pin, fromB64(record.salt), record.iterations)
-    return hash === record.hash
-  } catch {
-    return false
-  }
+  return read(CRED_KEY) !== null
 }
 
 export function disableLock(): void {
-  remove(PIN_KEY)
   remove(CRED_KEY)
 }
-
-/* ---------- Face ID / Touch ID via WebAuthn -------------------------------- */
 
 export async function biometricSupported(): Promise<boolean> {
   if (typeof window === 'undefined' || !window.PublicKeyCredential) return false
@@ -118,10 +78,6 @@ export async function biometricSupported(): Promise<boolean> {
   } catch {
     return false
   }
-}
-
-export function hasBiometric(): boolean {
-  return read(CRED_KEY) !== null
 }
 
 export async function enrollBiometric(accountLabel: string): Promise<boolean> {
@@ -156,11 +112,7 @@ export async function enrollBiometric(accountLabel: string): Promise<boolean> {
   }
 }
 
-export function dropBiometric(): void {
-  remove(CRED_KEY)
-}
-
-export async function unlockWithBiometric(): Promise<boolean> {
+export async function unlock(): Promise<boolean> {
   const id = read(CRED_KEY)
   if (!id) return false
   try {

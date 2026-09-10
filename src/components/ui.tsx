@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Loader2, X } from 'lucide-react'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -150,67 +150,6 @@ export function Spinner({ label = 'Loading' }: { label?: string }) {
     <div className="flex items-center justify-center gap-2 py-16 text-sm text-ink-3">
       <Loader2 size={18} className="animate-spin" />
       {label}
-    </div>
-  )
-}
-
-/**
- * A run of digit boxes backed by one real input, so iOS autofill and paste keep
- * working — the input sits invisibly on top and the boxes are just a drawing of
- * its value. Calls `onComplete` once the last digit lands.
- */
-export function DigitInput({
-  value, onChange, onComplete, length = 6, autoFocus, label, secret,
-}: {
-  value: string
-  onChange: (v: string) => void
-  onComplete?: (v: string) => void
-  length?: number
-  autoFocus?: boolean
-  label: string
-  secret?: boolean
-}) {
-  const ref = useRef<HTMLInputElement>(null)
-  const done = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (value.length === length && done.current !== value) {
-      done.current = value
-      onComplete?.(value)
-    }
-    if (value.length < length) done.current = null
-  }, [value, length, onComplete])
-
-  return (
-    <div className="relative" onClick={() => ref.current?.focus()}>
-      <input
-        ref={ref}
-        value={value}
-        onChange={(e) => onChange(e.target.value.replace(/\D/g, '').slice(0, length))}
-        inputMode="numeric"
-        autoComplete="one-time-code"
-        maxLength={length}
-        autoFocus={autoFocus}
-        aria-label={label}
-        className="absolute inset-0 z-10 h-full w-full cursor-pointer opacity-0"
-      />
-      <div className="flex justify-center gap-2" aria-hidden>
-        {Array.from({ length }, (_, i) => (
-          <span
-            key={i}
-            className={`tnum flex h-13 w-11 items-center justify-center rounded-xl border text-xl font-semibold
-                        transition-colors ${
-                          i === value.length
-                            ? 'border-accent bg-surface'
-                            : value[i]
-                              ? 'border-line bg-surface'
-                              : 'border-line bg-raised'
-                        }`}
-          >
-            {value[i] ? (secret ? '•' : value[i]) : ''}
-          </span>
-        ))}
-      </div>
     </div>
   )
 }

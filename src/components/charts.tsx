@@ -3,7 +3,7 @@ import {
   Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
 import { money, moneyShort, monthLabel } from '../lib/format'
-import { BASE_CURRENCY } from '../types'
+import type { Currency } from '../types'
 
 export interface Slice {
   key: string
@@ -14,9 +14,10 @@ export interface Slice {
 
 const AXIS_TICK = { fill: 'var(--c-ink-3)', fontSize: 11 }
 
-function TooltipBox({ label, value, color, share }: {
+function TooltipBox({ label, value, currency, color, share }: {
   label: string
   value: number
+  currency: Currency
   color?: string
   share?: number
 }) {
@@ -27,7 +28,7 @@ function TooltipBox({ label, value, color, share }: {
         <span className="text-ink-2">{label}</span>
       </div>
       <div className="tnum mt-1 text-sm font-semibold text-ink">
-        {money(value, BASE_CURRENCY)}
+        {money(value, currency)}
         {share !== undefined && <span className="ml-1.5 font-normal text-ink-3">{share.toFixed(0)}%</span>}
       </div>
     </div>
@@ -39,7 +40,11 @@ function TooltipBox({ label, value, color, share }: {
  * that, adjacent hues stop being distinguishable and the ranked list below the
  * chart is what people actually read.
  */
-export function CategoryDonut({ slices, total }: { slices: Slice[]; total: number }) {
+export function CategoryDonut({ slices, total, currency }: {
+  slices: Slice[]
+  total: number
+  currency: Currency
+}) {
   const [active, setActive] = useState<number | null>(null)
 
   return (
@@ -73,7 +78,15 @@ export function CategoryDonut({ slices, total }: { slices: Slice[]; total: numbe
             content={({ active: on, payload }) => {
               if (!on || !payload?.length) return null
               const s = payload[0].payload as Slice
-              return <TooltipBox label={s.name} value={s.value} color={s.color} share={total ? (s.value / total) * 100 : 0} />
+              return (
+                <TooltipBox
+                  label={s.name}
+                  value={s.value}
+                  currency={currency}
+                  color={s.color}
+                  share={total ? (s.value / total) * 100 : 0}
+                />
+              )
             }}
           />
         </PieChart>
@@ -84,7 +97,7 @@ export function CategoryDonut({ slices, total }: { slices: Slice[]; total: numbe
       <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
         <span className="text-xs text-ink-3">{active === null ? 'Total' : slices[active].name}</span>
         <span className="tnum text-2xl font-semibold text-ink">
-          {money(active === null ? total : slices[active].value, BASE_CURRENCY, { decimals: false })}
+          {money(active === null ? total : slices[active].value, currency, { decimals: false })}
         </span>
       </div>
     </div>
@@ -97,7 +110,11 @@ export interface TrendPoint {
 }
 
 /** One series, so no legend — the section title names it. */
-export function MonthlyTrend({ points, highlight }: { points: TrendPoint[]; highlight?: string }) {
+export function MonthlyTrend({ points, highlight, currency }: {
+  points: TrendPoint[]
+  highlight?: string
+  currency: Currency
+}) {
   return (
     <div className="h-44">
       <ResponsiveContainer width="100%" height="100%">
@@ -110,7 +127,7 @@ export function MonthlyTrend({ points, highlight }: { points: TrendPoint[]; high
             axisLine={{ stroke: 'var(--c-line)' }}
           />
           <YAxis
-            tickFormatter={(v: number) => moneyShort(v, BASE_CURRENCY)}
+            tickFormatter={(v: number) => moneyShort(v, currency)}
             tick={AXIS_TICK}
             tickLine={false}
             axisLine={false}
@@ -121,7 +138,14 @@ export function MonthlyTrend({ points, highlight }: { points: TrendPoint[]; high
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null
               const p = payload[0].payload as TrendPoint
-              return <TooltipBox label={monthLabel(p.key, { long: true })} value={p.value} color="var(--series-1)" />
+              return (
+                <TooltipBox
+                  label={monthLabel(p.key, { long: true })}
+                  value={p.value}
+                  currency={currency}
+                  color="var(--series-1)"
+                />
+              )
             }}
           />
           <Bar dataKey="value" radius={[4, 4, 0, 0]} isAnimationActive={false}>

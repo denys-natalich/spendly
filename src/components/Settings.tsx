@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { LogOut, Monitor, Moon, Sun } from 'lucide-react'
 import { useStore } from '../store'
 import { useTheme, type ThemeChoice } from '../lib/theme'
-import { totalEur } from '../lib/analytics'
+import { total } from '../lib/analytics'
 import { money } from '../lib/format'
 import { BASE_CURRENCY } from '../types'
 import { ImportSettings } from './ImportSettings'
@@ -15,7 +15,7 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
   onEnableLock: () => void
   onDisableLock: () => void
 }) {
-  const { session, signOut, expenses, categories, latestRates } = useStore()
+  const { session, signOut, expenses, categories, latestRates, convert, displayCurrency } = useStore()
   const [theme, setTheme] = useTheme()
   const [busy, setBusy] = useState(false)
 
@@ -86,7 +86,7 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
         <Card className="divide-y divide-line">
           <Row label="Expenses recorded" value={String(expenses.length)} />
           <Row label="Categories" value={String(categories.length)} />
-          <Row label="Total tracked" value={money(totalEur(expenses), BASE_CURRENCY)} />
+          <Row label="Total tracked" value={money(total(expenses, convert), displayCurrency)} />
         </Card>
       </section>
     </div>
