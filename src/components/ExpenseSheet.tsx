@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { iconFor, slotColor } from '../lib/icons'
 import { money, symbolOf, today } from '../lib/format'
 import { nearestKnown, rateToEur } from '../lib/fx'
+import { collectNotes, matchNotes } from '../lib/notes'
 import { BASE_CURRENCY, CURRENCIES, type Currency, type Expense } from '../types'
 import { Button, Segmented, Sheet, inputClass } from './ui'
 
@@ -38,6 +39,47 @@ export function ExpenseSheet({ open, expense, onClose }: {
   const [error, setError] = useState<string | null>(null)
   const selectedRef = useRef<HTMLButtonElement>(null)
 
+  /*
+   * Note autocomplete. The suggestions only appear once the note has been typed
+   * into — opening the sheet on an existing expense should not drop a list over
+   * the fields below it.
+   */
+  const [typingNote, setTypingNote] = useState(false)
+  const [highlight, setHighlight] = useState(-1)
+  const knownNotes = useMemo(() => collectNotes(expenses), [expenses])
+  const suggestions = useMemo(() => matchNotes(knownNotes, note), [knownNotes, note])
+  const showSuggestions = typingNote && suggestions.length > 0
+  const listRef = useRef<HTMLUListElement>(null)
+
+  // The list hangs below the note, which on a phone is close to the keyboard —
+  // scroll the sheet just enough to keep the whole list on screen.
+  useEffect(() => {
+    if (showSuggestions) listRef.current?.scrollIntoView({ block: 'nearest' })
+  }, [showSuggestions, suggestions.length])
+
+  function pickNote(value: string) {
+    setNote(value)
+    setTypingNote(false)
+    setHighlight(-1)
+  }
+
+  function onNoteKeyDown(e: ReactKeyboardEvent<HTMLInputElement>) {
+    if (!showSuggestions) return
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault()
+      const step = e.key === 'ArrowDown' ? 1 : suggestions.length
+      setHighlight((h) => (h + 1 + step) % (suggestions.length + 1) - 1)
+    } else if (e.key === 'Enter' && highlight >= 0) {
+      e.preventDefault()
+      pickNote(suggestions[highlight])
+    } else if (e.key === 'Escape') {
+      // Dismiss the list only; the sheet's own Escape handler sits on document.
+      e.stopPropagation()
+      setTypingNote(false)
+      setHighlight(-1)
+    }
+  }
+
   // Re-seed the fields each time the sheet opens rather than on every render,
   // so typing is never clobbered by a parent update.
   useEffect(() => {
@@ -49,6 +91,8 @@ export function ExpenseSheet({ open, expense, onClose }: {
     setCategoryId(expense?.category_id ?? active[0]?.id ?? null)
     setSpentOn(expense?.spent_on ?? today())
     setNote(expense?.note ?? '')
+    setTypingNote(false)
+    setHighlight(-1)
   }, [open, expense, active])
 
   // When editing, the chosen category may sit far along the scroller.
@@ -159,15 +203,61 @@ export function ExpenseSheet({ open, expense, onClose }: {
           })}
         </div>
 
-        <input
-          type="text"
-          value={note}
-          maxLength={200}
-          placeholder="Note"
-          onChange={(e) => setNote(e.target.value)}
-          aria-label="Note"
-          className={`${inputClass} w-full`}
-        />
+        {/* Notes repeat — the same handful of shops, week after week. Two typed
+            letters bring the earlier spellings back rather than retyping one. */}
+        <div className="relative">
+          <input
+            type="text"
+            value={note}
+            maxLength={200}
+            placeholder="Note"
+            onChange={(e) => {
+              setNote(e.target.value)
+              setTypingNote(true)
+              setHighlight(-1)
+            }}
+            onKeyDown={onNoteKeyDown}
+            onBlur={() => setTypingNote(false)}
+            aria-label="Note"
+            role="combobox"
+            aria-expanded={showSuggestions}
+            aria-controls="note-suggestions"
+            aria-autocomplete="list"
+            aria-activedescendant={highlight >= 0 ? `note-suggestion-${highlight}` : undefined}
+            autoComplete="off"
+            autoCorrect="off"
+            className={`${inputClass} w-full`}
+          />
+          {showSuggestions && (
+            <ul
+              ref={listRef}
+              id="note-suggestions"
+              role="listbox"
+              aria-label="Earlier notes"
+              className="absolute inset-x-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-line
+                         bg-surface shadow-lg shadow-black/10"
+            >
+              {suggestions.map((s, i) => (
+                <li
+                  key={s}
+                  id={`note-suggestion-${i}`}
+                  role="option"
+                  aria-selected={i === highlight}
+                  // Swallowing the press keeps focus in the input, so the blur
+                  // that closes the list never fires before the click lands.
+                  // cursor-pointer is what makes iOS emit these at all.
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => pickNote(s)}
+                  className={`cursor-pointer truncate px-3.5 py-2.5 text-sm pointer-coarse:text-base ${
+                    i === highlight ? 'bg-raised text-ink' : 'text-ink-2'
+                  }`}
+                >
+                  <Match text={s} query={note} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
 
         {/* The date is almost always today, so it gets a quiet row of its own
             rather than competing with the note for width. */}
@@ -197,5 +287,23 @@ export function ExpenseSheet({ open, expense, onClose }: {
         </div>
       </div>
     </Sheet>
+  )
+}
+
+/**
+ * Bolds the typed part of a suggestion so the rest reads as the completion.
+ * An accent-only match ("cafe" against "Café") has no plain offset to mark, so
+ * it renders unstyled rather than bolding the wrong characters.
+ */
+function Match({ text, query }: { text: string; query: string }) {
+  const at = text.toLowerCase().indexOf(query.trim().toLowerCase())
+  if (at < 0) return <>{text}</>
+  const end = at + query.trim().length
+  return (
+    <>
+      {text.slice(0, at)}
+      <span className="font-semibold text-ink">{text.slice(at, end)}</span>
+      {text.slice(end)}
+    </>
   )
 }
