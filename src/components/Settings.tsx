@@ -5,6 +5,7 @@ import { useTheme, type ThemeChoice } from '../lib/theme'
 import { totalEur } from '../lib/analytics'
 import { money } from '../lib/format'
 import { BASE_CURRENCY } from '../types'
+import { ImportSettings } from './ImportSettings'
 import { LockSettings } from './LockSettings'
 import { PasswordSettings } from './PasswordSettings'
 import { Button, Card, SectionTitle, Segmented } from './ui'
@@ -77,6 +78,8 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
           happened, so past totals never shift when rates move later.
         </p>
       </section>
+
+      <ImportSettings />
 
       <section>
         <SectionTitle>Your data</SectionTitle>

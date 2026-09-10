@@ -7,7 +7,7 @@ everything is reported in **euro** using the official rate from the day the expe
   ranked breakdown, and a 12-month trend.
 - **Expenses** — day-grouped list with search and category filter; tap any row to edit or delete.
 - **Categories** — eight to start with; add your own with an icon and a colour.
-- **Settings** — password, app lock, theme (system / light / dark), today's rates, account.
+- **Settings** — password, app lock, Monefy import, theme (system / light / dark), today's rates, account.
 
 Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password auth), `vite-plugin-pwa`.
 
@@ -125,6 +125,28 @@ reading your finances. It does not encrypt the Supabase session, so an attacker 
 on an unlocked device could get past it. On iOS, where an installed web app has neither an address
 bar nor an inspector, that's a high bar. The PIN is stored only as a PBKDF2-SHA256 hash with a random
 salt, never transmitted. Forgetting it costs you a sign-out and one email code.
+
+---
+
+## Importing from Monefy
+
+**Settings → Import** takes a Monefy CSV export. It parses the file, shows you what it found and how
+each Monefy category maps onto yours, and writes nothing until you confirm.
+
+Three things it handles that a naive importer wouldn't:
+
+- **Historical rates.** Rather than one API call per day, it pulls the whole daily series from NBU's
+  range endpoint — two requests for five years — and caches every day in `fx_rates`. Each imported
+  expense then converts at the rate from the day it happened, not today's.
+- **Duplicates, by count.** Two identical ₴10 bus fares on the same day are two real expenses, so
+  matching on content alone would wrongly drop one. It compares how many times each
+  (date, category, amount, note) appears in the file against how many are already stored, and
+  inserts only the excess. Re-running an import is therefore safe.
+- **Missing categories.** Names that match an existing category are reused; the rest are created,
+  spread across the least-used palette slots so the donut stays readable.
+
+Monefy's header repeats the word `currency` twice, so fields are read by position, not by name.
+Income rows and currencies other than EUR/USD/UAH are skipped and reported rather than guessed at.
 
 ---
 

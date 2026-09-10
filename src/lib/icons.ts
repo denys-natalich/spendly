@@ -1,8 +1,8 @@
 import {
   Baby, BookOpen, Briefcase, Bus, Car, Coffee, CreditCard, Dumbbell, Film, Fuel,
-  Gift, GraduationCap, HeartPulse, House, Music, PawPrint, PiggyBank, Pill, Plane,
-  Plug, Repeat, Scissors, Shirt, ShoppingCart, Smartphone, Tag, TrendingUp,
-  Utensils, Wallet, Wifi, Wrench,
+  Gift, GraduationCap, Heart, HeartPulse, House, Music, PawPrint, PiggyBank, Pill,
+  Plane, Plug, Repeat, Scissors, Shirt, ShoppingCart, Smartphone, SprayCan, Tag,
+  Ticket, TrendingUp, Utensils, Wallet, Wifi, Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -15,7 +15,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   'book-open': BookOpen, 'graduation-cap': GraduationCap, baby: Baby,
   'paw-print': PawPrint, wrench: Wrench, briefcase: Briefcase, 'credit-card': CreditCard,
   'piggy-bank': PiggyBank, 'trending-up': TrendingUp, wallet: Wallet, repeat: Repeat,
-  tag: Tag,
+  heart: Heart, ticket: Ticket, 'spray-can': SprayCan, tag: Tag,
 }
 
 export const ICON_KEYS = Object.keys(CATEGORY_ICONS)

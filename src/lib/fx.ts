@@ -107,3 +107,58 @@ export function rateToEur(currency: Currency, rates: DayRates | null): number {
 export function fromEur(amountEur: number, currency: Currency, rates: DayRates | null): number {
   return amountEur * rateToEur(currency, rates)
 }
+
+/**
+ * Bulk-load every daily rate between two dates and cache them.
+ *
+ * NBU's range endpoint returns the whole series in one request per currency, so
+ * importing five years of history costs two calls rather than one per day.
+ * Returns how many new days were cached.
+ */
+export async function backfillRates(
+  from: string,
+  to: string,
+  known: Map<string, DayRates>,
+): Promise<number> {
+  const [eur, usd] = await Promise.all([fetchSeries('eur', from, to), fetchSeries('usd', from, to)])
+  if (eur.size === 0 || usd.size === 0) return 0
+
+  const fresh: DayRates[] = []
+  for (const [day, uahPerEur] of eur) {
+    if (known.has(day)) continue
+    const uahPerUsd = usd.get(day)
+    if (!uahPerUsd) continue
+    fresh.push({ day, usd: uahPerEur / uahPerUsd, uah: uahPerEur })
+  }
+  if (fresh.length === 0) return 0
+
+  // Another device may have cached some of these already; skip collisions
+  // rather than failing the whole batch.
+  for (let i = 0; i < fresh.length; i += 500) {
+    const chunk = fresh.slice(i, i + 500)
+    await supabase.from('fx_rates').upsert(chunk, { onConflict: 'day', ignoreDuplicates: true })
+  }
+  for (const r of fresh) known.set(r.day, r)
+  return fresh.length
+}
+
+const RANGE = 'https://bank.gov.ua/NBU_Exchange/exchange_site'
+
+async function fetchSeries(valcode: string, from: string, to: string): Promise<Map<string, number>> {
+  const compactFrom = from.replaceAll('-', '')
+  const compactTo = to.replaceAll('-', '')
+  const url = `${RANGE}?start=${compactFrom}&end=${compactTo}&valcode=${valcode}&sort=exchangedate&order=asc&json`
+  const out = new Map<string, number>()
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return out
+    const rows: Array<{ exchangedate: string; rate: number }> = await res.json()
+    for (const r of rows) {
+      const [d, m, y] = r.exchangedate.split('.')
+      if (d && m && y && r.rate > 0) out.set(`${y}-${m}-${d}`, r.rate)
+    }
+  } catch {
+    /* Offline or blocked — the caller falls back to per-day fetches. */
+  }
+  return out
+}

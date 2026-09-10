@@ -4,7 +4,8 @@ import {
 } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase, isConfigured } from './lib/supabase'
-import { ensureRatesFor, loadCachedRates, nearestKnown, rateToEur } from './lib/fx'
+import { backfillRates, ensureRatesFor, loadCachedRates, nearestKnown, rateToEur } from './lib/fx'
+import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
 import { today } from './lib/format'
 import type { Category, DayRates, Expense, ExpenseDraft } from './types'
 
@@ -26,6 +27,20 @@ interface Store {
   addCategory: (input: Pick<Category, 'name' | 'icon' | 'color_slot'>) => Promise<void>
   updateCategory: (id: string, patch: Partial<Pick<Category, 'name' | 'icon' | 'color_slot' | 'is_archived'>>) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
+  importExpenses: (rows: MonefyRow[], onProgress: (p: ImportProgress) => void) => Promise<ImportResult>
+}
+
+export interface ImportProgress {
+  phase: 'rates' | 'categories' | 'expenses'
+  done: number
+  total: number
+}
+
+export interface ImportResult {
+  inserted: number
+  skippedAsDuplicate: number
+  categoriesCreated: string[]
+  ratesCached: number
 }
 
 const StoreContext = createContext<Store | null>(null)
@@ -192,6 +207,117 @@ export function StoreProvider({ children }: { children: ReactNode }) {
    * A password sidesteps the lot: it is typed inside the app, on the device
    * that needs the session, with no third party in the path.
    */
+  /*
+   * Bulk import. Three phases, each reported so a five-year file doesn't look
+   * like a hang:
+   *   rates      — one range request per currency, not one per day
+   *   categories — create whatever the file references and the account lacks
+   *   expenses   — batched inserts, skipping rows already present
+   *
+   * Duplicate detection counts occurrences rather than matching on content
+   * alone: two identical ₴10 bus fares on the same day are two real expenses,
+   * so only the excess over what is already stored gets skipped.
+   */
+  const importExpenses = useCallback<Store['importExpenses']>(async (rows, onProgress) => {
+    if (!userId || rows.length === 0) {
+      return { inserted: 0, skippedAsDuplicate: 0, categoriesCreated: [], ratesCached: 0 }
+    }
+
+    const days = rows.map((r) => r.spent_on).sort()
+    onProgress({ phase: 'rates', done: 0, total: 1 })
+    const rateMap = ratesRef.current
+    const ratesCached = await backfillRates(days[0], days[days.length - 1], rateMap)
+    setRates(new Map(rateMap))
+    onProgress({ phase: 'rates', done: 1, total: 1 })
+
+    // --- categories -------------------------------------------------------
+    onProgress({ phase: 'categories', done: 0, total: 1 })
+    const byName = new Map(categories.map((c) => [c.name.toLowerCase(), c]))
+    const wanted = [...new Set(rows.map((r) => targetCategoryName(r.category)))]
+    const missing = wanted.filter((n) => !byName.has(n.toLowerCase()))
+    const created: string[] = []
+
+    if (missing.length > 0) {
+      const usage = new Map<number, number>()
+      for (const c of categories) usage.set(c.color_slot, (usage.get(c.color_slot) ?? 0) + 1)
+      let order = categories.reduce((max, c) => Math.max(max, c.sort_order), 0)
+
+      const payload = missing.map((name) => {
+        // Spread new categories over the least-used palette slots.
+        let slot = 1
+        let best = Infinity
+        for (let i = 1; i <= 7; i++) {
+          const n = usage.get(i) ?? 0
+          if (n < best) { best = n; slot = i }
+        }
+        usage.set(slot, best + 1)
+        order += 10
+        return {
+          user_id: userId,
+          name,
+          icon: NEW_CATEGORY_ICONS[name] ?? 'tag',
+          color_slot: slot,
+          sort_order: order,
+        }
+      })
+
+      const { data, error: err } = await supabase.from('categories').insert(payload).select()
+      if (err) throw err
+      for (const c of (data ?? []) as Category[]) {
+        byName.set(c.name.toLowerCase(), c)
+        created.push(c.name)
+      }
+      setCategories((prev) => [...prev, ...((data ?? []) as Category[])].sort(byCategoryOrder))
+    }
+    onProgress({ phase: 'categories', done: 1, total: 1 })
+
+    // --- skip what is already stored --------------------------------------
+    const seen = new Map<string, number>()
+    for (const e of expenses) {
+      const k = fingerprint(e.spent_on, e.category_id, e.amount, e.currency, e.note)
+      seen.set(k, (seen.get(k) ?? 0) + 1)
+    }
+
+    const pending: Array<Record<string, unknown>> = []
+    let skippedAsDuplicate = 0
+    for (const r of rows) {
+      const cat = byName.get(targetCategoryName(r.category).toLowerCase())
+      const key = fingerprint(r.spent_on, cat?.id ?? null, r.amount, r.currency, r.note)
+      const remaining = seen.get(key) ?? 0
+      if (remaining > 0) {
+        seen.set(key, remaining - 1)
+        skippedAsDuplicate++
+        continue
+      }
+      const day = rateMap.get(r.spent_on) ?? nearestKnown(r.spent_on, rateMap)
+      pending.push({
+        user_id: userId,
+        category_id: cat?.id ?? null,
+        amount: r.amount,
+        currency: r.currency,
+        rate_to_eur: rateToEur(r.currency, day),
+        spent_on: r.spent_on,
+        note: r.note,
+      })
+    }
+
+    // --- insert -----------------------------------------------------------
+    const BATCH = 400
+    const inserted: Expense[] = []
+    for (let i = 0; i < pending.length; i += BATCH) {
+      const { data, error: err } = await supabase
+        .from('expenses')
+        .insert(pending.slice(i, i + BATCH))
+        .select()
+      if (err) throw err
+      inserted.push(...(data ?? []).map(hydrateExpense))
+      onProgress({ phase: 'expenses', done: Math.min(i + BATCH, pending.length), total: pending.length })
+    }
+
+    setExpenses((prev) => sortExpenses([...inserted, ...prev]))
+    return { inserted: inserted.length, skippedAsDuplicate, categoriesCreated: created, ratesCached }
+  }, [userId, categories, expenses])
+
   const signIn = useCallback(async (email: string, password: string) => {
     const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) throw err
@@ -212,7 +338,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const value: Store = {
     session, authLoading, loading, error, categories, expenses, rates, latestRates,
     signIn, setPassword, signOut, addExpense, updateExpense, deleteExpense,
-    addCategory, updateCategory, deleteCategory,
+    addCategory, updateCategory, deleteCategory, importExpenses,
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>
@@ -237,6 +363,17 @@ async function seedDefaultCategories(userId: string): Promise<Category[] | null>
     .select()
   if (error) return null
   return data as Category[]
+}
+
+/** Identity of one expense for duplicate detection. */
+function fingerprint(
+  day: string,
+  categoryId: string | null,
+  amount: number,
+  currency: string,
+  note: string | null,
+): string {
+  return [day, categoryId ?? '-', amount.toFixed(2), currency, note ?? ''].join('|')
 }
 
 function sortExpenses(list: Expense[]): Expense[] {
