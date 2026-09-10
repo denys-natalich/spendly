@@ -17,8 +17,8 @@ interface Store {
   expenses: Expense[]
   rates: Map<string, DayRates>
   latestRates: DayRates | null
-  sendCode: (email: string) => Promise<void>
-  verifyCode: (email: string, code: string) => Promise<void>
+  signIn: (email: string, password: string) => Promise<void>
+  setPassword: (password: string) => Promise<void>
   signOut: () => Promise<void>
   addExpense: (draft: ExpenseDraft) => Promise<void>
   updateExpense: (id: string, draft: ExpenseDraft) => Promise<void>
@@ -181,19 +181,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [])
 
   /*
-   * Six-digit code rather than a magic link. Two reasons: mail providers
-   * pre-fetch links to scan them, which burns the single-use token before the
-   * human clicks it; and on iOS a link always opens in the browser, never in an
-   * installed home-screen app, so the session would land in the wrong storage.
-   * Omitting emailRedirectTo is what makes Supabase send the token, not a URL.
+   * Password rather than an emailed link or code, because every email-based
+   * flow breaks somewhere here. Links get pre-fetched by mail scanners, which
+   * spends the single-use token before the human clicks it. On iOS a link
+   * always opens in the browser, never in an installed home-screen app, whose
+   * storage is separate — so the installed app could never be signed in.
+   * And Supabase only allows editing the email template with custom SMTP
+   * configured, which rules out putting a code in the message at all.
+   *
+   * A password sidesteps the lot: it is typed inside the app, on the device
+   * that needs the session, with no third party in the path.
    */
-  const sendCode = useCallback(async (email: string) => {
-    const { error: err } = await supabase.auth.signInWithOtp({ email })
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error: err } = await supabase.auth.signInWithPassword({ email, password })
     if (err) throw err
   }, [])
 
-  const verifyCode = useCallback(async (email: string, code: string) => {
-    const { error: err } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' })
+  /** Lets an account created by magic link acquire a password from a live session. */
+  const setPassword = useCallback(async (password: string) => {
+    const { error: err } = await supabase.auth.updateUser({ password })
     if (err) throw err
   }, [])
 
@@ -205,7 +211,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
   const value: Store = {
     session, authLoading, loading, error, categories, expenses, rates, latestRates,
-    sendCode, verifyCode, signOut, addExpense, updateExpense, deleteExpense,
+    signIn, setPassword, signOut, addExpense, updateExpense, deleteExpense,
     addCategory, updateCategory, deleteCategory,
   }
 

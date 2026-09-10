@@ -7,9 +7,9 @@ everything is reported in **euro** using the official rate from the day the expe
   ranked breakdown, and a 12-month trend.
 - **Expenses** — day-grouped list with search and category filter; tap any row to edit or delete.
 - **Categories** — eight to start with; add your own with an icon and a colour.
-- **Settings** — app lock, theme (system / light / dark), today's rates, account.
+- **Settings** — password, app lock, theme (system / light / dark), today's rates, account.
 
-Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + magic-link auth), `vite-plugin-pwa`.
+Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password auth), `vite-plugin-pwa`.
 
 ---
 
@@ -47,31 +47,32 @@ VITE_SUPABASE_ANON_KEY=your-anon-public-key
 
 The anon key is safe to ship in a client bundle — row level security is what protects your data.
 
-### 4. Switch the sign-in email to a code
+### 4. Create your account
 
-Sign-in uses a **6-digit code**, not a magic link. Under **Authentication → Emails → Magic Link**,
-replace the template body with something that includes `{{ .Token }}`:
+Sign-in is **email + password**, with no email sent at any point. Under
+**Authentication → Users → Add user**, create yourself an account with a password, and tick
+*Auto Confirm User* so it doesn't wait on an email that will never arrive.
 
-```html
-<h2>Your Spendly code</h2>
-<p style="font-size:28px;letter-spacing:6px"><strong>{{ .Token }}</strong></p>
-<p>It expires in an hour. If you didn't ask for it, ignore this email.</p>
-```
+Every emailed sign-in flow breaks somewhere here, which is why there isn't one:
 
-Two reasons this beats a link. Mail providers pre-fetch links to scan them, which spends the
-single-use token before you ever click it — the `otp_expired` error. And on iOS a link always opens
-in the browser, never in an installed home-screen app, so the session would land in the wrong
-storage and the installed app would stay signed out.
+- Magic links get pre-fetched by mail scanners, which spends the single-use token before you click
+  it — the `otp_expired` error.
+- On iOS a link always opens in the browser, never in an installed home-screen app. Those have
+  separate storage, so the installed app could never end up signed in.
+- Supabase only allows editing the email template once custom SMTP is configured, so a 6-digit code
+  can't be put into the message either.
 
-### 5. Allow the sign-in origins
+A password is typed inside the app, on the device that needs the session, with nothing in between.
 
-Under **Authentication → URL Configuration**:
+If your account already exists without a password — created by magic link before the switch — sign
+in on a device that still has a live session and use **Settings → Password → Set a password**.
 
-- **Site URL** → your production URL
-- **Redirect URLs** → add `http://localhost:5173/**` for local development
+### 5. Close the door
 
-Codes don't strictly need a redirect entry, but Supabase falls back to Site URL for anything
-link-shaped, so it's worth setting correctly.
+Once your account exists, turn off **Authentication → Sign In / Providers → Email → Allow new users
+to sign up**. Anyone can read the publishable key out of the deployed bundle; without this they can
+register against your project and burn its quota. Row level security keeps their data separate from
+yours either way.
 
 ### 6. Run it
 
@@ -80,8 +81,8 @@ npm install
 npm run dev
 ```
 
-Open the URL it prints, enter your email, and type the code Supabase sends you. The first sign-in
-creates a starter set of categories automatically.
+Open the URL it prints and sign in. The first sign-in creates a starter set of categories
+automatically.
 
 ---
 
@@ -103,8 +104,9 @@ worker keeps the app shell cached; new expenses still need a connection.
 
 > iOS only offers "Add to Home Screen" over HTTPS, so install from the deployed URL rather than
 > `localhost`. An installed web app has its own storage, separate from Safari's — so sign in once
-> from inside the installed app, not before installing. It also escapes Safari's seven-day storage
-> eviction, which is why installing keeps you signed in and bookmarking doesn't.
+> from inside the installed app, not before installing. iOS Keychain will offer to save the password
+> and autofill it there. Installing also escapes Safari's seven-day storage eviction, which is why
+> it keeps you signed in and a bookmark doesn't.
 
 ---
 
@@ -155,8 +157,11 @@ src/
     format.ts          money, date and month formatting
     icons.ts           category icon set + validated colour palette slots
     theme.ts           system / light / dark preference
+    lock.ts            PIN hashing + WebAuthn, device-local
+    useAppLock.ts      locks on leaving the foreground
   components/
     Overview.tsx  Expenses.tsx  Categories.tsx  Settings.tsx
+    Login.tsx  LockScreen.tsx  LockSettings.tsx  PasswordSettings.tsx
     ExpenseSheet.tsx   add / edit / delete an expense
     charts.tsx         donut + monthly trend (Recharts)
     ui.tsx             Card, Button, Field, Sheet, Segmented, …

@@ -6,6 +6,7 @@ import { totalEur } from '../lib/analytics'
 import { money } from '../lib/format'
 import { BASE_CURRENCY } from '../types'
 import { LockSettings } from './LockSettings'
+import { PasswordSettings } from './PasswordSettings'
 import { Button, Card, SectionTitle, Segmented } from './ui'
 
 export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
@@ -53,6 +54,8 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
           />
         </Card>
       </section>
+
+      <PasswordSettings />
 
       <LockSettings enabled={lockEnabled} onEnable={onEnableLock} onDisable={onDisableLock} />
 
