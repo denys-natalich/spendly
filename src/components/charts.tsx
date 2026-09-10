@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Bar, BarChart, Cell, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from 'recharts'
@@ -45,15 +44,16 @@ export function CategoryDonut({ slices, total, currency }: {
   total: number
   currency: Currency
 }) {
-  const [active, setActive] = useState<number | null>(null)
-
   // Label only what there is room for: every slice is named in the ranked list
   // underneath, so labels stay selective rather than exhaustive.
   const labelled = (index: number) =>
     total > 0 && slices[index] !== undefined && slices[index].value / total >= LABEL_THRESHOLD
 
   return (
-    <div className="relative h-72">
+    /* Inert on purpose: a tap on a phone leaves a slice stuck in its hover
+       state, and every number the tooltip carried is already in the ranked
+       list beside the chart. */
+    <div className="pointer-events-none relative h-72">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
@@ -67,44 +67,22 @@ export function CategoryDonut({ slices, total, currency }: {
             stroke="var(--c-surface)"
             strokeWidth={2}
             isAnimationActive={false}
-            onMouseEnter={(_, i) => setActive(i)}
-            onMouseLeave={() => setActive(null)}
             label={(props: SliceLabelProps) => renderLabel(props, slices, total, labelled)}
             labelLine={false}
           >
-            {slices.map((s, i) => (
-              <Cell
-                key={s.key}
-                fill={s.color}
-                opacity={active === null || active === i ? 1 : 0.35}
-                style={{ transition: 'opacity 120ms' }}
-              />
+            {slices.map((s) => (
+              <Cell key={s.key} fill={s.color} />
             ))}
           </Pie>
-          <Tooltip
-            content={({ active: on, payload }) => {
-              if (!on || !payload?.length) return null
-              const s = payload[0].payload as Slice
-              return (
-                <TooltipBox
-                  label={s.name}
-                  value={s.value}
-                  currency={currency}
-                  color={s.color}
-                  share={total ? (s.value / total) * 100 : 0}
-                />
-              )
-            }}
-          />
         </PieChart>
       </ResponsiveContainer>
 
       {/* Hero number lives in the hole: the donut answers "how is it split", this
           answers "how much". */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-xs text-ink-3">{active === null ? 'Total' : slices[active].name}</span>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-xs text-ink-3">Total</span>
         <span className="tnum text-2xl font-semibold text-ink">
-          {money(active === null ? total : slices[active].value, currency, { decimals: false })}
+          {money(total, currency, { decimals: false })}
         </span>
       </div>
     </div>
@@ -120,6 +98,10 @@ const MAX_LABEL_CHARS = 11
 /* Consecutive labels sit at alternating distances: adjacent thin slices point
    at nearly the same spot, and one ring of text would overlap itself. */
 const LABEL_OFFSETS = [12, 38]
+/* Enough to measure a label against the chart's edges without a text metric:
+   11px semibold system text averages a shade over six pixels a character. */
+const CHAR_WIDTH = 6.3
+const EDGE_PAD = 4
 
 // Recharts hands these in as possibly-undefined and sometimes as strings.
 interface SliceLabelProps {
@@ -155,9 +137,20 @@ function renderLabel(
   const elbowX = cx + (outerRadius + offset) * cos
   const elbowY = cy + (outerRadius + offset) * sin
   const right = elbowX >= cx
-  const textX = elbowX + (right ? 7 : -7)
   const name =
     slice.name.length > MAX_LABEL_CHARS ? `${slice.name.slice(0, MAX_LABEL_CHARS - 1)}…` : slice.name
+
+  /*
+   * A label on the outer ring can reach past the side of the chart, and the
+   * half that falls outside is simply not drawn — "Presents" arrives as
+   * "resents". Hold the text inside the box instead and let the leader stretch
+   * to meet it: a slightly longer elbow reads fine, a clipped word does not.
+   * cx sits at the middle of the chart, so twice it is the width.
+   */
+  const labelWidth = name.length * CHAR_WIDTH
+  const textX = right
+    ? Math.min(elbowX + 7, cx * 2 - EDGE_PAD - labelWidth)
+    : Math.max(elbowX - 7, EDGE_PAD + labelWidth)
 
   // Text wears ink tokens, never the series colour — the leader carries identity.
   return (
