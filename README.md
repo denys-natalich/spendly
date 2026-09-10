@@ -252,6 +252,17 @@ supabase/schema.sql    tables, RLS policies
 supabase/avatars.sql   private avatar bucket + storage policies
 ```
 
+### Donut labels
+
+Slices are labelled with their category and share directly on the chart, but only above 8% — which
+is really a minimum arc width of about 29°. Labels collide only between narrow neighbours, because
+two thin slices point at nearly the same spot; anything below the threshold is read from the ranked
+list beneath, which carries every category with its share and amount.
+
+Consecutive labels also alternate between two leader lengths, so slices that are adjacent but both
+wide enough don't stack their text. Label text uses ink tokens rather than the series colour — the
+leader line is what carries identity.
+
 ### Chart colours
 
 `--series-1` … `--series-7` in `src/index.css` are a fixed, validated categorical palette: the slot

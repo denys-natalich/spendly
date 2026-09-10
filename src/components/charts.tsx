@@ -47,16 +47,21 @@ export function CategoryDonut({ slices, total, currency }: {
 }) {
   const [active, setActive] = useState<number | null>(null)
 
+  // Label only what there is room for: every slice is named in the ranked list
+  // underneath, so labels stay selective rather than exhaustive.
+  const labelled = (index: number) =>
+    total > 0 && slices[index] !== undefined && slices[index].value / total >= LABEL_THRESHOLD
+
   return (
-    <div className="relative h-56">
+    <div className="relative h-72">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <Pie
             data={slices}
             dataKey="value"
             nameKey="name"
-            innerRadius="64%"
-            outerRadius="94%"
+            innerRadius="37%"
+            outerRadius="55%"
             /* A 2px surface-coloured gap keeps neighbouring hues from touching. */
             paddingAngle={1.5}
             stroke="var(--c-surface)"
@@ -64,6 +69,8 @@ export function CategoryDonut({ slices, total, currency }: {
             isAnimationActive={false}
             onMouseEnter={(_, i) => setActive(i)}
             onMouseLeave={() => setActive(null)}
+            label={(props: SliceLabelProps) => renderLabel(props, slices, total, labelled)}
+            labelLine={false}
           >
             {slices.map((s, i) => (
               <Cell
@@ -101,6 +108,87 @@ export function CategoryDonut({ slices, total, currency }: {
         </span>
       </div>
     </div>
+  )
+}
+
+/* 8% is ~29° of arc. Labels collide only between narrow neighbours — two thin
+   slices point at nearly the same spot — so the threshold is really a minimum
+   angular width, and anything below it is read from the ranked list instead. */
+const LABEL_THRESHOLD = 0.08
+const RAD = Math.PI / 180
+const MAX_LABEL_CHARS = 11
+/* Consecutive labels sit at alternating distances: adjacent thin slices point
+   at nearly the same spot, and one ring of text would overlap itself. */
+const LABEL_OFFSETS = [12, 38]
+
+// Recharts hands these in as possibly-undefined and sometimes as strings.
+interface SliceLabelProps {
+  cx?: number | string
+  cy?: number | string
+  midAngle?: number
+  outerRadius?: number | string
+  index?: number
+}
+
+function renderLabel(
+  props: SliceLabelProps,
+  slices: Slice[],
+  total: number,
+  labelled: (i: number) => boolean,
+) {
+  const index = props.index ?? -1
+  if (!labelled(index)) return <g key={index} />
+
+  const slice = slices[index]
+  const cx = Number(props.cx)
+  const cy = Number(props.cy)
+  const outerRadius = Number(props.outerRadius)
+  const midAngle = props.midAngle ?? 0
+  const cos = Math.cos(-midAngle * RAD)
+  const sin = Math.sin(-midAngle * RAD)
+
+  // Rank among labelled slices decides which ring this one sits on.
+  let rank = 0
+  for (let i = 0; i < index; i++) if (labelled(i)) rank++
+  const offset = LABEL_OFFSETS[rank % LABEL_OFFSETS.length]
+
+  const elbowX = cx + (outerRadius + offset) * cos
+  const elbowY = cy + (outerRadius + offset) * sin
+  const right = elbowX >= cx
+  const textX = elbowX + (right ? 7 : -7)
+  const name =
+    slice.name.length > MAX_LABEL_CHARS ? `${slice.name.slice(0, MAX_LABEL_CHARS - 1)}…` : slice.name
+
+  // Text wears ink tokens, never the series colour — the leader carries identity.
+  return (
+    <g key={slice.key}>
+      <polyline
+        points={`${cx + (outerRadius + 3) * cos},${cy + (outerRadius + 3) * sin} ${elbowX},${elbowY} ${textX},${elbowY}`}
+        stroke={slice.color}
+        strokeWidth={1.5}
+        fill="none"
+      />
+      <text
+        x={textX}
+        y={elbowY - 3}
+        textAnchor={right ? 'start' : 'end'}
+        fill="var(--c-ink)"
+        fontSize={11}
+        fontWeight={600}
+      >
+        {name}
+      </text>
+      <text
+        x={textX}
+        y={elbowY + 10}
+        textAnchor={right ? 'start' : 'end'}
+        fill="var(--c-ink-3)"
+        fontSize={11}
+        className="tnum"
+      >
+        {Math.round((slice.value / total) * 100)}%
+      </text>
+    </g>
   )
 }
 
