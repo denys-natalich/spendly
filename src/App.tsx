@@ -15,6 +15,7 @@ import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
 import { Setup } from './components/Setup'
 import { Card, Spinner } from './components/ui'
+import { DEFAULT_FILTER, type ExpenseFilter } from './lib/filters'
 import type { Expense } from './types'
 
 type Tab = 'overview' | 'expenses' | 'categories' | 'settings'
@@ -31,6 +32,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>('overview')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
+  const [filter, setFilter] = useState<ExpenseFilter>(DEFAULT_FILTER)
   const lock = useAppLock(Boolean(session))
   const [lockPrompt, setLockPrompt] = useState(false)
 
@@ -52,6 +54,16 @@ export default function App() {
   function openEdit(e: Expense) {
     setEditing(e)
     setSheetOpen(true)
+  }
+
+  /** Overview → Expenses, scoped to one category in the month being viewed. */
+  function openCategory(categoryKey: string, month: string) {
+    setFilter({
+      category: categoryKey === 'uncategorised' ? 'none' : categoryKey,
+      range: { kind: 'month', month },
+      query: '',
+    })
+    setTab('expenses')
   }
 
   const current = TABS.find((t) => t.id === tab)!
@@ -123,8 +135,15 @@ export default function App() {
             <Spinner label="Loading your expenses" />
           ) : (
             <>
-              {tab === 'overview' && <Overview onAdd={openNew} />}
-              {tab === 'expenses' && <Expenses onEdit={openEdit} onAdd={openNew} />}
+              {tab === 'overview' && <Overview onAdd={openNew} onOpenCategory={openCategory} />}
+              {tab === 'expenses' && (
+                <Expenses
+                  filter={filter}
+                  onFilterChange={setFilter}
+                  onEdit={openEdit}
+                  onAdd={openNew}
+                />
+              )}
               {tab === 'categories' && <Categories />}
               {tab === 'settings' && (
                 <Settings

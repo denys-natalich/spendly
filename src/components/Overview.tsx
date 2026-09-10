@@ -9,7 +9,10 @@ import { Card, EmptyState, SectionTitle, Segmented } from './ui'
 
 const TREND_MONTHS = 12
 
-export function Overview({ onAdd }: { onAdd: () => void }) {
+export function Overview({ onAdd, onOpenCategory }: {
+  onAdd: () => void
+  onOpenCategory: (categoryKey: string, month: string) => void
+}) {
   const { expenses, categories, latestRates, convert, displayCurrency, setDisplayCurrency } = useStore()
   const currentMonth = monthKey(today())
   const [month, setMonth] = useState(currentMonth)
@@ -121,13 +124,21 @@ export function Overview({ onAdd }: { onAdd: () => void }) {
                   and valued in ink, so identity never rests on colour alone. */}
               <ul className="mt-5 space-y-1 lg:mt-0 lg:flex-1">
                 {totals.map((t) => (
-                  <li key={t.key} className="flex items-center gap-3 rounded-lg px-1 py-1.5">
-                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: t.color }} />
-                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{t.name}</span>
-                    <span className="tnum text-xs text-ink-3">{((t.value / monthTotal) * 100).toFixed(0)}%</span>
-                    <span className="tnum w-24 text-right text-sm font-medium text-ink">
-                      {money(t.value, displayCurrency)}
-                    </span>
+                  <li key={t.key}>
+                    <button
+                      type="button"
+                      onClick={() => onOpenCategory(t.key, month)}
+                      className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left
+                                 transition-colors hover:bg-raised"
+                    >
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: t.color }} />
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{t.name}</span>
+                      <span className="tnum text-xs text-ink-3">{((t.value / monthTotal) * 100).toFixed(0)}%</span>
+                      <span className="tnum w-24 text-right text-sm font-medium text-ink">
+                        {money(t.value, displayCurrency)}
+                      </span>
+                      <ChevronRight size={14} className="shrink-0 text-ink-3" />
+                    </button>
                   </li>
                 ))}
               </ul>

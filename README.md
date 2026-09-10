@@ -5,8 +5,11 @@ totals are held in **euro** using the official rate from the day the expense hap
 read back in any of the three currencies from a switch on the overview.
 
 - **Overview** — monthly total, month-over-month change, spend per day, a category donut with a
-  ranked breakdown, and a 12-month trend. A €/$/₴ switch restates every figure on the screen.
-- **Expenses** — day-grouped list with search and category filter; tap any row to edit or delete.
+  ranked breakdown, and a 12-month trend. A €/$/₴ switch restates every figure on the screen, and
+  tapping a category opens its expenses for the month being viewed.
+- **Expenses** — day-grouped list with search, category filter and a date range (last 7 or 30 days,
+  a specific month, a custom range, or all time). Amounts lead with the reporting currency; what was
+  actually paid sits underneath. Tap any row to edit or delete.
 - **Categories** — eight to start with; add your own with an icon and a colour.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, account.
 
