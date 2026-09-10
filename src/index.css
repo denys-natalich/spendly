@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+/* Theme tokens are plain custom properties so they can be swapped by the OS
+   setting *and* by an explicit toggle; @theme inline maps them onto Tailwind
+   utilities without a var-to-var indirection. */
+@theme inline {
+  --color-bg:        var(--c-bg);
+  --color-surface:   var(--c-surface);
+  --color-raised:    var(--c-raised);
+  --color-line:      var(--c-line);
+  --color-ink:       var(--c-ink);
+  --color-ink-2:     var(--c-ink-2);
+  --color-ink-3:     var(--c-ink-3);
+  --color-accent:    var(--c-accent);
+  --color-accent-in: var(--c-accent-in);
+  --color-danger:    var(--c-danger);
+  --color-good:      var(--c-good);
+
+  --font-sans: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius-card: 1rem;
+}
+
+:root {
+  color-scheme: light;
+  --c-bg:        #f4f4f1;
+  --c-surface:   #fcfcfb;
+  --c-raised:    #f0efec;
+  --c-line:      #e4e3de;
+  --c-ink:       #0b0b0b;
+  --c-ink-2:     #52514e;
+  --c-ink-3:     #86857f;
+  --c-accent:    #2a78d6;
+  --c-accent-in: #ffffff;
+  --c-danger:    #e34948;
+  --c-good:      #008300;
+
+  /* Categorical palette — validated for CVD separation and contrast on both
+     surfaces (dataviz six checks). Slot order is the safety mechanism: never
+     reorder or cycle it. */
+  --series-1: #2a78d6;
+  --series-2: #eb6834;
+  --series-3: #1baf7a;
+  --series-4: #eda100;
+  --series-5: #e87ba4;
+  --series-6: #008300;
+  --series-7: #4a3aa7;
+  --series-other: #86857f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --c-bg:        #121211;
+    --c-surface:   #1a1a19;
+    --c-raised:    #232322;
+    --c-line:      #33332f;
+    --c-ink:       #ffffff;
+    --c-ink-2:     #c3c2b7;
+    --c-ink-3:     #8a8a80;
+    --c-accent:    #3987e5;
+    --c-accent-in: #ffffff;
+    --c-danger:    #e66767;
+    --c-good:      #4caf50;
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+    --series-5: #d55181;
+    --series-6: #008300;
+    --series-7: #9085e9;
+    --series-other: #8a8a80;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-bg:        #121211;
+  --c-surface:   #1a1a19;
+  --c-raised:    #232322;
+  --c-line:      #33332f;
+  --c-ink:       #ffffff;
+  --c-ink-2:     #c3c2b7;
+  --c-ink-3:     #8a8a80;
+  --c-accent:    #3987e5;
+  --c-accent-in: #ffffff;
+  --c-danger:    #e66767;
+  --c-good:      #4caf50;
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+  --series-5: #d55181;
+  --series-6: #008300;
+  --series-7: #9085e9;
+  --series-other: #8a8a80;
+}
+
+@layer base {
+  html {
+    background: var(--c-bg);
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background: var(--c-bg);
+    color: var(--c-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    overscroll-behavior-y: none;
+  }
+
+  /* Form controls inherit the page font — but from @layer base, so a text-*
+     utility on the element still wins. */
+  button, input, select, textarea { font: inherit; color: inherit; }
+}
+
+/* Money and dates line up column-wise only with tabular figures. */
+.tnum { font-variant-numeric: tabular-nums; }
+
+/* Recharts draws its own focus outlines on wrappers; suppress the duplicate. */
+.recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
