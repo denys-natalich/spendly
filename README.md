@@ -131,6 +131,21 @@ currency moved. An expense already in the currency being displayed shows its sto
 untouched, since the euro figure is rounded to two decimals and a round trip would drift by a
 kopiyka.
 
+## Entering an expense
+
+The add sheet is built to fit above the software keyboard on a small phone — amount, category, note,
+date and the save button all reachable without a scroll, on roughly the 500px an iPhone 12 leaves.
+
+Two things make that fit. Amount and currency share a row, and the categories are one horizontally
+scrolling strip rather than a wrapping grid: fifteen chips wrap to four rows, which is most of the
+space available. The strip is **ordered by how often each category is used**, so the handful that
+account for most entries sit under the thumb.
+
+iOS does not shrink the layout viewport when the keyboard opens — `100dvh` still reports the whole
+screen — so a bottom-anchored sheet ends up behind it. `lib/useViewportBox.ts` reads
+`window.visualViewport`, which is the only thing that reports the truth, and the sheet is sized to
+that instead.
+
 ## Avatars
 
 Tap the circle in the top-right (mobile) or beside the wordmark (desktop) to jump to Settings, where

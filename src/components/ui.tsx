@@ -1,5 +1,6 @@
 import { useEffect, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { Loader2, X } from 'lucide-react'
+import { useViewportBox } from '../lib/useViewportBox'
 
 export function Card({ children, className = '' }: { children: ReactNode; className?: string }) {
   return (
@@ -55,12 +56,13 @@ export const inputClass =
   'focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30'
 
 export function Segmented<T extends string>({
-  value, options, onChange, ariaLabel,
+  value, options, onChange, ariaLabel, compact,
 }: {
   value: T
   options: Array<{ value: T; label: ReactNode }>
   onChange: (v: T) => void
   ariaLabel: string
+  compact?: boolean
 }) {
   return (
     <div role="tablist" aria-label={ariaLabel} className="inline-flex rounded-xl bg-raised p-1">
@@ -71,7 +73,7 @@ export function Segmented<T extends string>({
           type="button"
           aria-selected={value === o.value}
           onClick={() => onChange(o.value)}
-          className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+          className={`rounded-lg font-medium transition-colors ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'} ${
             value === o.value ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink-2'
           }`}
         >
@@ -89,6 +91,8 @@ export function Sheet({ open, title, onClose, children }: {
   onClose: () => void
   children: ReactNode
 }) {
+  const viewport = useViewportBox(open)
+
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -103,16 +107,23 @@ export function Sheet({ open, title, onClose, children }: {
 
   if (!open) return null
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center">
-      <div className="absolute inset-0 bg-black/45" onClick={onClose} aria-hidden />
+    <>
+      <div className="fixed inset-0 z-50 bg-black/45" onClick={onClose} aria-hidden />
+      {/* Sized to the visual viewport so the sheet rests on top of the keyboard
+          rather than behind it. */}
+      <div
+        className="pointer-events-none fixed inset-x-0 z-50 flex items-end justify-center sm:items-center"
+        style={{ top: viewport.top, height: viewport.height }}
+      >
       <div
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className="relative max-h-[92vh] w-full overflow-y-auto rounded-t-3xl border border-line bg-surface
+        className="pointer-events-auto relative max-h-full w-full overflow-y-auto overscroll-contain
+                   rounded-t-3xl border border-line bg-surface
                    pb-[env(safe-area-inset-bottom)] sm:max-w-md sm:rounded-3xl sm:pb-0"
       >
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-4">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-line bg-surface px-5 py-3">
           <h2 className="text-base font-semibold">{title}</h2>
           <button
             type="button"
@@ -123,9 +134,10 @@ export function Sheet({ open, title, onClose, children }: {
             <X size={18} />
           </button>
         </div>
-        <div className="px-5 py-5">{children}</div>
+        <div className="px-5 py-4">{children}</div>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
 

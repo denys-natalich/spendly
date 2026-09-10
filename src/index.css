@@ -120,6 +120,10 @@
 /* Money and dates line up column-wise only with tabular figures. */
 .tnum { font-variant-numeric: tabular-nums; }
 
+/* Horizontal chip rows: the scrollbar adds height and reads as chrome. */
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
 /* Recharts draws its own focus outlines on wrappers; suppress the duplicate. */
 .recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
 
