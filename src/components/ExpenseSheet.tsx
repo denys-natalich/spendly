@@ -159,23 +159,27 @@ export function ExpenseSheet({ open, expense, onClose }: {
           })}
         </div>
 
-        <div className="flex gap-2">
-          <input
-            type="text"
-            value={note}
-            maxLength={200}
-            placeholder="Note"
-            onChange={(e) => setNote(e.target.value)}
-            aria-label="Note"
-            className={`${inputClass} min-w-0 flex-1`}
-          />
+        <input
+          type="text"
+          value={note}
+          maxLength={200}
+          placeholder="Note"
+          onChange={(e) => setNote(e.target.value)}
+          aria-label="Note"
+          className={`${inputClass} w-full`}
+        />
+
+        {/* The date is almost always today, so it gets a quiet row of its own
+            rather than competing with the note for width. */}
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-line bg-raised px-3.5 py-2">
+          <span className="text-sm text-ink-2">Date</span>
           <input
             type="date"
             value={spentOn}
             max={today()}
             onChange={(e) => setSpentOn(e.target.value || today())}
             aria-label="Date"
-            className={`${inputClass} w-36 shrink-0`}
+            className="tnum bg-transparent text-right text-sm text-ink focus:outline-none"
           />
         </div>
 
