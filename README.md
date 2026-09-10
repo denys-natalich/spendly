@@ -265,17 +265,24 @@ leader line is what carries identity.
 
 ### Chart colours
 
-`--series-1` … `--series-8` in `src/index.css` are a fixed, validated categorical palette: the slot
+`--series-1` … `--series-16` in `src/index.css` are a fixed, validated categorical palette: the slot
 order is what keeps adjacent hues distinguishable for colourblind readers, so **don't reorder or
 cycle it**. Categories store a slot index, so a category keeps its colour no matter how a chart is
 filtered or sorted. Both light and dark steps were checked for CVD separation and contrast.
 
+Slots 1–8 are eight hues. Slots 9–16 are those same hues at the far end of the lightness band,
+because sixteen separate hues do not exist inside one band — a pair shares a hue and differs in
+weight, which reads as two colours where two neighbouring hues would have read as one. The order of
+the second eight was solved for rather than inherited (all 8! orderings scored on their worst
+adjacent pair, in both themes at once). Measured on the adjacent pairlist: worst CVD ΔE 7.2 light /
+8.4 dark, worst normal-vision ΔE 19.6 light / 19.3 dark. The light figure sits in the 6–8 band that
+is legal only alongside a second channel — here every category carries its icon and its name in the
+ranked list beside the chart, so colour never identifies anything on its own.
+
 Slots are assigned, never chosen: `assignColorSlot` hands out the first colour no other category
-holds, so up to eight categories are each unmistakably their own, and `recolourCollisions` moves any
-category that shares a colour with an older one — the repair runs once per load and is a no-op
-afterwards. Eight is the whole palette rather than a round number: a ninth categorical hue stops
-being tellable from the eight already on screen, so past eight the least-used colour comes round
-again instead of a new one being invented.
+holds, so up to sixteen categories are each their own, and `recolourCollisions` moves any category
+that shares a colour with an older one — the repair runs once per load and is a no-op afterwards.
+Past sixteen the least-used colour comes round again rather than a new one being invented.
 
 ## Possible next steps
 

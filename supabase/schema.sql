@@ -8,17 +8,16 @@ create extension if not exists "pgcrypto";
 
 -- ---------------------------------------------------------------------------
 -- categories
--- color_slot indexes into the app's validated categorical palette (1..8) so a
+-- color_slot indexes into the app's validated categorical palette (1..16) so a
 -- category keeps its colour no matter how a chart is filtered or sorted. The
--- app assigns it — one slot per category, never picked by hand — and eight is
--- the whole palette, past which categorical hues stop being tellable apart.
+-- app assigns it — one slot per category, never picked by hand.
 -- ---------------------------------------------------------------------------
 create table if not exists public.categories (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users (id) on delete cascade,
   name        text not null check (char_length(trim(name)) between 1 and 40),
   icon        text not null default 'tag',
-  color_slot  smallint not null default 1 check (color_slot between 1 and 8),
+  color_slot  smallint not null default 1 check (color_slot between 1 and 16),
   sort_order  integer not null default 0,
   is_archived boolean not null default false,
   created_at  timestamptz not null default now(),

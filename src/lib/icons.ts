@@ -28,11 +28,15 @@ export function iconFor(key: string | undefined): LucideIcon {
 
 /**
  * Slots index the validated categorical palette; slot order is never cycled.
- * Eight is the whole palette, not a round number: a ninth categorical hue stops
- * being tellable from the eight already on screen, so the app hands these out
- * rather than growing them.
+ *
+ * The first eight are eight hues. The second eight are those same hues at the
+ * far end of the lightness band, because sixteen genuinely separate hues do not
+ * exist inside one: a pair shares a hue and differs in weight, which the eye
+ * reads as two colours where two neighbouring hues would have read as one. The
+ * order of the second eight was solved for rather than inherited — slot order
+ * is what keeps neighbours apart — and validated in both themes.
  */
-export const COLOR_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8] as const
+export const COLOR_SLOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16] as const
 
 export function slotColor(slot: number): string {
   return `var(--series-${Math.min(Math.max(slot, 1), COLOR_SLOTS.length)})`
@@ -40,9 +44,9 @@ export function slotColor(slot: number): string {
 
 /**
  * The colour a new category gets — the first slot no other category holds, so
- * every category is its own colour for as long as the palette lasts. Past eight
- * the least-used colour comes round again, always the same way for the same set
- * of categories.
+ * every category is its own colour for as long as the palette lasts. Past
+ * sixteen the least-used colour comes round again, always the same way for the
+ * same set of categories.
  */
 export function assignColorSlot(taken: Iterable<number>): number {
   const uses = new Map<number, number>(COLOR_SLOTS.map((s) => [s, 0]))
@@ -57,7 +61,7 @@ export const UNCATEGORISED_COLOR = 'var(--series-other)'
  * days the colour was picked by hand, or from an import that ran out of slots —
  * is a state to be corrected rather than preserved. The older category keeps
  * its colour and the newer one moves, and only while a free slot exists: past
- * eight categories the palette is genuinely out, and churning them every load
+ * sixteen categories the palette is genuinely out, and churning them every load
  * would be worse than the collision.
  */
 export function recolourCollisions(categories: Category[]): Array<{ id: string; color_slot: number }> {
