@@ -5,6 +5,7 @@ import { useTheme, type ThemeChoice } from '../lib/theme'
 import { total } from '../lib/analytics'
 import { money } from '../lib/format'
 import { BASE_CURRENCY } from '../types'
+import { VERSION_LABEL } from '../lib/version'
 import { AvatarSettings } from './AvatarSettings'
 import { ImportSettings } from './ImportSettings'
 import { LockSettings } from './LockSettings'
@@ -90,6 +91,10 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
           <Row label="Total tracked" value={money(total(expenses, convert), displayCurrency)} />
         </Card>
       </section>
+
+      {/* Last line on the screen: what the phone is actually running, so a
+          stale service worker is visible rather than guessed at. */}
+      <p className="pb-1 text-center text-xs text-ink-3">Spendly {VERSION_LABEL}</p>
     </div>
   )
 }

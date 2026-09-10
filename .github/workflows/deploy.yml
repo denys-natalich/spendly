@@ -28,8 +28,20 @@ jobs:
 
       - run: npm ci
 
+      # The patch number is the deploy counter, so every push to main ships a
+      # visibly newer version: run 14 is 1.0.1, run 15 is 1.0.2, and so on. For
+      # a feature release bump the minor in package.json and set RUN_OFFSET to
+      # the run number of that release, which restarts the patches at .0.
+      - name: Derive version
+        env:
+          RUN_OFFSET: 13
+        run: |
+          base=$(node -p "require('./package.json').version.split('.').slice(0, 2).join('.')")
+          echo "VITE_APP_VERSION=$base.$(( ${{ github.run_number }} - RUN_OFFSET ))" >> "$GITHUB_ENV"
+
       - run: npm run build
         env:
+          VITE_APP_VERSION: ${{ env.VITE_APP_VERSION }}
           # These are baked into the client bundle and are public by design —
           # the anon/publishable key is protected by row level security, not by
           # secrecy. They live in Actions secrets only to keep them out of the
