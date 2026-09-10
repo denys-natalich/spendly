@@ -10,7 +10,7 @@ read back in any of the three currencies from a switch on the overview.
 - **Expenses** — day-grouped list with search, category filter and a date range (last 7 or 30 days,
   a specific month, a custom range, or all time). Amounts lead with the reporting currency; what was
   actually paid sits underneath. Tap any row to edit or delete.
-- **Categories** — eight to start with; add your own with an icon and a colour.
+- **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, account.
 
 Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password auth), `vite-plugin-pwa`.
@@ -265,10 +265,17 @@ leader line is what carries identity.
 
 ### Chart colours
 
-`--series-1` … `--series-7` in `src/index.css` are a fixed, validated categorical palette: the slot
+`--series-1` … `--series-8` in `src/index.css` are a fixed, validated categorical palette: the slot
 order is what keeps adjacent hues distinguishable for colourblind readers, so **don't reorder or
 cycle it**. Categories store a slot index, so a category keeps its colour no matter how a chart is
 filtered or sorted. Both light and dark steps were checked for CVD separation and contrast.
+
+Slots are assigned, never chosen: `assignColorSlot` hands out the first colour no other category
+holds, so up to eight categories are each unmistakably their own, and `recolourCollisions` moves any
+category that shares a colour with an older one — the repair runs once per load and is a no-op
+afterwards. Eight is the whole palette rather than a round number: a ninth categorical hue stops
+being tellable from the eight already on screen, so past eight the least-used colour comes round
+again instead of a new one being invented.
 
 ## Possible next steps
 

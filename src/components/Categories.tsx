@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Pencil, Plus, Trash2 } from 'lucide-react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
-import { COLOR_SLOTS, ICON_KEYS, iconFor, slotColor } from '../lib/icons'
+import { ICON_KEYS, assignColorSlot, iconFor, slotColor } from '../lib/icons'
 import { money } from '../lib/format'
 import { total } from '../lib/analytics'
 import type { Category } from '../types'
@@ -20,12 +20,12 @@ export function Categories() {
     return map
   }, [categories, expenses, convert])
 
-  // Default new categories to the least-used hue so the donut stays readable.
-  const suggestedSlot = useMemo(() => {
-    const used = new Map<number, number>(COLOR_SLOTS.map((s) => [s, 0]))
-    for (const c of categories) used.set(c.color_slot, (used.get(c.color_slot) ?? 0) + 1)
-    return [...used.entries()].sort((a, b) => a[1] - b[1])[0][0]
-  }, [categories])
+  // Shown in the sheet before the category exists, so the colour it is about to
+  // be given is visible while naming it rather than a surprise afterwards.
+  const nextSlot = useMemo(
+    () => assignColorSlot(categories.map((c) => c.color_slot)),
+    [categories],
+  )
 
   return (
     <div className="space-y-4">
@@ -75,23 +75,22 @@ export function Categories() {
       <CategorySheet
         open={creating || editing !== null}
         category={editing}
-        suggestedSlot={suggestedSlot}
+        nextSlot={nextSlot}
         onClose={() => { setCreating(false); setEditing(null) }}
       />
     </div>
   )
 }
 
-function CategorySheet({ open, category, suggestedSlot, onClose }: {
+function CategorySheet({ open, category, nextSlot, onClose }: {
   open: boolean
   category: Category | null
-  suggestedSlot: number
+  nextSlot: number
   onClose: () => void
 }) {
   const { addCategory, updateCategory, deleteCategory } = useStore()
   const [name, setName] = useState('')
   const [icon, setIcon] = useState('tag')
-  const [slot, setSlot] = useState(1)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
@@ -100,11 +99,10 @@ function CategorySheet({ open, category, suggestedSlot, onClose }: {
     if (!open) return
     setName(category?.name ?? '')
     setIcon(category?.icon ?? 'tag')
-    setSlot(category?.color_slot ?? suggestedSlot)
     setBusy(false)
     setError(null)
     setConfirmDelete(false)
-  }, [open, category, suggestedSlot])
+  }, [open, category])
 
   const trimmed = name.trim()
 
@@ -122,6 +120,7 @@ function CategorySheet({ open, category, suggestedSlot, onClose }: {
   }
 
   const Preview = iconFor(icon)
+  const color = slotColor(category?.color_slot ?? nextSlot)
 
   return (
     <Sheet open={open} title={category ? 'Edit category' : 'New category'} onClose={onClose}>
@@ -129,9 +128,9 @@ function CategorySheet({ open, category, suggestedSlot, onClose }: {
         <div className="flex items-center gap-3">
           <span
             className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full"
-            style={{ background: `color-mix(in oklab, ${slotColor(slot)} 16%, transparent)` }}
+            style={{ background: `color-mix(in oklab, ${color} 16%, transparent)` }}
           >
-            <Preview size={22} style={{ color: slotColor(slot) }} />
+            <Preview size={22} style={{ color }} />
           </span>
           <input
             autoFocus
@@ -143,24 +142,6 @@ function CategorySheet({ open, category, suggestedSlot, onClose }: {
             className={`${inputClass} w-full`}
           />
         </div>
-
-        <Field label="Colour">
-          <div className="flex flex-wrap gap-2">
-            {COLOR_SLOTS.map((s) => (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setSlot(s)}
-                aria-label={`Colour ${s}`}
-                aria-pressed={slot === s}
-                className="flex h-9 w-9 items-center justify-center rounded-full"
-                style={{ background: slotColor(s) }}
-              >
-                {slot === s && <Check size={16} color="#fff" strokeWidth={3} />}
-              </button>
-            ))}
-          </div>
-        </Field>
 
         <Field label="Icon">
           <div className="grid max-h-44 grid-cols-8 gap-1 overflow-y-auto rounded-xl border border-line p-2">
@@ -177,7 +158,7 @@ function CategorySheet({ open, category, suggestedSlot, onClose }: {
                     icon === key ? 'bg-raised text-ink' : 'text-ink-3 hover:bg-raised'
                   }`}
                 >
-                  <Icon size={17} style={icon === key ? { color: slotColor(slot) } : undefined} />
+                  <Icon size={17} style={icon === key ? { color } : undefined} />
                 </button>
               )
             })}
@@ -194,8 +175,8 @@ function CategorySheet({ open, category, suggestedSlot, onClose }: {
             onClick={() =>
               run(() =>
                 category
-                  ? updateCategory(category.id, { name: trimmed, icon, color_slot: slot })
-                  : addCategory({ name: trimmed, icon, color_slot: slot }),
+                  ? updateCategory(category.id, { name: trimmed, icon })
+                  : addCategory({ name: trimmed, icon }),
               )
             }
           >

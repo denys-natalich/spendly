@@ -44,6 +44,7 @@
   --series-5: #e87ba4;
   --series-6: #008300;
   --series-7: #4a3aa7;
+  --series-8: #e34948;
   --series-other: #86857f;
 }
 
@@ -69,6 +70,7 @@
     --series-5: #d55181;
     --series-6: #008300;
     --series-7: #9085e9;
+    --series-8: #e66767;
     --series-other: #8a8a80;
   }
 }
@@ -94,6 +96,7 @@
   --series-5: #d55181;
   --series-6: #008300;
   --series-7: #9085e9;
+  --series-8: #e66767;
   --series-other: #8a8a80;
 }
 

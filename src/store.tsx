@@ -9,6 +9,7 @@ import { makeConverter, type Convert } from './lib/convert'
 import { getAvatarUrl, removeAvatar, uploadAvatar } from './lib/avatar'
 import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
 import { today } from './lib/format'
+import { assignColorSlot, recolourCollisions } from './lib/icons'
 import { BASE_CURRENCY, CURRENCIES } from './types'
 import type { Category, Currency, DayRates, Expense, ExpenseDraft } from './types'
 
@@ -34,8 +35,8 @@ interface Store {
   addExpense: (draft: ExpenseDraft) => Promise<void>
   updateExpense: (id: string, draft: ExpenseDraft) => Promise<void>
   deleteExpense: (id: string) => Promise<void>
-  addCategory: (input: Pick<Category, 'name' | 'icon' | 'color_slot'>) => Promise<void>
-  updateCategory: (id: string, patch: Partial<Pick<Category, 'name' | 'icon' | 'color_slot' | 'is_archived'>>) => Promise<void>
+  addCategory: (input: Pick<Category, 'name' | 'icon'>) => Promise<void>
+  updateCategory: (id: string, patch: Partial<Pick<Category, 'name' | 'icon' | 'is_archived'>>) => Promise<void>
   deleteCategory: (id: string) => Promise<void>
   importExpenses: (rows: MonefyRow[], onProgress: (p: ImportProgress) => void) => Promise<ImportResult>
 }
@@ -150,7 +151,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
 
         const map = new Map(cachedRates.map((r) => [r.day, r]))
         const starter = cats.data?.length ? null : await seedDefaultCategories(userId)
-        setCategories((starter ?? cats.data) as Category[])
+        const loaded = (starter ?? cats.data) as Category[]
+        setCategories(loaded)
         setExpenses(exps.map(hydrateExpense))
         setRates(map)
         ratesRef.current = map
@@ -158,6 +160,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // Keep today's rate warm so the entry form always converts live.
         const fresh = await ensureRatesFor(today(), map)
         if (!cancelled && fresh) setRates(new Map(map))
+
+        // Settle any colour clash left by the days colours were picked by hand.
+        // One update per clash rather than an upsert, which would have to
+        // resend every not-null column to change a number; a failure is left
+        // unreported on purpose, since a repeated hue is not worth failing a
+        // load the user needs their data from.
+        const fixes = recolourCollisions(loaded)
+        if (fixes.length > 0) {
+          await Promise.all(
+            fixes.map((f) =>
+              supabase.from('categories').update({ color_slot: f.color_slot }).eq('id', f.id),
+            ),
+          )
+          if (!cancelled) {
+            const byId = new Map(fixes.map((f) => [f.id, f.color_slot]))
+            setCategories((prev) =>
+              prev.map((c) => (byId.has(c.id) ? { ...c, color_slot: byId.get(c.id)! } : c)),
+            )
+          }
+        }
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : 'Could not load your data.')
       } finally {
@@ -207,12 +229,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setExpenses((prev) => prev.filter((e) => e.id !== id))
   }, [])
 
-  const addCategory = useCallback(async (input: Pick<Category, 'name' | 'icon' | 'color_slot'>) => {
+  const addCategory = useCallback<Store['addCategory']>(async (input) => {
     if (!userId) return
     const nextOrder = categories.reduce((max, c) => Math.max(max, c.sort_order), 0) + 10
+    const color_slot = assignColorSlot(categories.map((c) => c.color_slot))
     const { data, error: err } = await supabase
       .from('categories')
-      .insert({ ...input, user_id: userId, sort_order: nextOrder })
+      .insert({ ...input, color_slot, user_id: userId, sort_order: nextOrder })
       .select()
       .single()
     if (err) throw err
@@ -276,19 +299,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const created: string[] = []
 
     if (missing.length > 0) {
-      const usage = new Map<number, number>()
-      for (const c of categories) usage.set(c.color_slot, (usage.get(c.color_slot) ?? 0) + 1)
+      const taken = categories.map((c) => c.color_slot)
       let order = categories.reduce((max, c) => Math.max(max, c.sort_order), 0)
 
       const payload = missing.map((name) => {
-        // Spread new categories over the least-used palette slots.
-        let slot = 1
-        let best = Infinity
-        for (let i = 1; i <= 7; i++) {
-          const n = usage.get(i) ?? 0
-          if (n < best) { best = n; slot = i }
-        }
-        usage.set(slot, best + 1)
+        const slot = assignColorSlot(taken)
+        taken.push(slot)
         order += 10
         return {
           user_id: userId,
@@ -410,7 +426,7 @@ const DEFAULT_CATEGORIES: Array<Pick<Category, 'name' | 'icon' | 'color_slot' | 
   { name: 'Utilities', icon: 'plug', color_slot: 4, sort_order: 50 },
   { name: 'Health', icon: 'heart-pulse', color_slot: 6, sort_order: 60 },
   { name: 'Subscriptions', icon: 'repeat', color_slot: 5, sort_order: 70 },
-  { name: 'Other', icon: 'tag', color_slot: 1, sort_order: 999 },
+  { name: 'Other', icon: 'tag', color_slot: 8, sort_order: 999 },
 ]
 
 /** Gives a brand-new account something to file expenses under. */
