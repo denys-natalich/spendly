@@ -4,8 +4,8 @@ A multi-currency expense tracker, installable as a PWA. Log spending in **EUR, U
 totals are held in **euro** using the official rate from the day the expense happened, and can be
 read back in any of the three currencies from a switch on the overview.
 
-- **Overview** — monthly total, month-over-month change, spend per day, a category donut with a
-  ranked breakdown, and a 12-month trend. A €/$/₴ switch restates every figure on the screen, and
+- **Overview** — monthly total, month-over-month change, spend per day, a ranked category
+  breakdown, and a 12-month trend. A €/$/₴ switch restates every figure on the screen, and
   tapping a category opens its expenses for the month being viewed.
 - **Expenses** — day-grouped list with search, category filter and a date range (last 7 or 30 days,
   a specific month, a custom range, or all time). Amounts lead with the reporting currency; what was
@@ -191,7 +191,7 @@ Three things it handles that a naive importer wouldn't:
   (date, category, amount, note) appears in the file against how many are already stored, and
   inserts only the excess. Re-running an import is therefore safe.
 - **Missing categories.** Names that match an existing category are reused; the rest are created,
-  spread across the least-used palette slots so the donut stays readable.
+  spread across the least-used palette slots so category colours stay distinct.
 
 Monefy's header repeats the word `currency` twice, so fields are read by position, not by name.
 Income rows and currencies other than EUR/USD/UAH are skipped and reported rather than guessed at.
@@ -246,22 +246,11 @@ src/
     Overview.tsx  Expenses.tsx  Categories.tsx  Settings.tsx
     Login.tsx  LockScreen.tsx  LockSettings.tsx  PasswordSettings.tsx
     ExpenseSheet.tsx   add / edit / delete an expense
-    charts.tsx         donut + monthly trend (Recharts)
+    charts.tsx         monthly trend (Recharts)
     ui.tsx             Card, Button, Field, Sheet, Segmented, …
 supabase/schema.sql    tables, RLS policies
 supabase/avatars.sql   private avatar bucket + storage policies
 ```
-
-### Donut labels
-
-Slices are labelled with their category and share directly on the chart, but only above 8% — which
-is really a minimum arc width of about 29°. Labels collide only between narrow neighbours, because
-two thin slices point at nearly the same spot; anything below the threshold is read from the ranked
-list beneath, which carries every category with its share and amount.
-
-Consecutive labels also alternate between two leader lengths, so slices that are adjacent but both
-wide enough don't stack their text. Label text uses ink tokens rather than the series colour — the
-leader line is what carries identity.
 
 ### Chart colours
 

@@ -2,10 +2,7 @@ import type { Category, Expense } from '../types'
 import type { Convert } from './convert'
 import { addMonths, monthKey } from './format'
 import { UNCATEGORISED_COLOR, slotColor } from './icons'
-import type { Slice, TrendPoint } from '../components/charts'
-
-/** Six named slices is the readable limit for a donut; the rest folds into Other. */
-const MAX_SLICES = 6
+import type { TrendPoint } from '../components/charts'
 
 export function expensesInMonth(expenses: Expense[], key: string): Expense[] {
   return expenses.filter((e) => monthKey(e.spent_on) === key)
@@ -44,25 +41,6 @@ export function byCategory(expenses: Expense[], categories: Category[], convert:
   }
 
   return [...totals.values()].sort((a, b) => b.value - a.value)
-}
-
-export function toSlices(totals: CategoryTotal[]): Slice[] {
-  if (totals.length <= MAX_SLICES + 1) return totals.map(stripCount)
-  const head = totals.slice(0, MAX_SLICES).map(stripCount)
-  const rest = totals.slice(MAX_SLICES)
-  return [
-    ...head,
-    {
-      key: 'other',
-      name: `+${rest.length} more`,
-      value: rest.reduce((s, r) => s + r.value, 0),
-      color: UNCATEGORISED_COLOR,
-    },
-  ]
-}
-
-function stripCount({ key, name, value, color }: CategoryTotal): Slice {
-  return { key, name, value, color }
 }
 
 /** A contiguous run of months ending at `endKey`, zero-filled so gaps show. */

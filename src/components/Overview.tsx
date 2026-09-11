@@ -1,10 +1,10 @@
 import { useMemo, useState } from 'react'
 import { ChevronLeft, ChevronRight, Inbox } from 'lucide-react'
 import { useStore } from '../store'
-import { byCategory, expensesInMonth, monthlyTrend, toSlices, total } from '../lib/analytics'
+import { byCategory, expensesInMonth, monthlyTrend, total } from '../lib/analytics'
 import { addMonths, money, monthKey, monthLabel, symbolOf, today } from '../lib/format'
 import { CURRENCIES } from '../types'
-import { CategoryDonut, MonthlyTrend } from './charts'
+import { MonthlyTrend } from './charts'
 import { Card, EmptyState, SectionTitle, Segmented } from './ui'
 
 const TREND_MONTHS = 12
@@ -23,7 +23,6 @@ export function Overview({ onAdd, onOpenCategory }: {
   const monthTotal = useMemo(() => total(monthExpenses, convert), [monthExpenses, convert])
   const prevTotal = useMemo(() => total(prevExpenses, convert), [prevExpenses, convert])
   const totals = useMemo(() => byCategory(monthExpenses, categories, convert), [monthExpenses, categories, convert])
-  const slices = useMemo(() => toSlices(totals), [totals])
   const trend = useMemo(
     () => monthlyTrend(expenses, currentMonth, TREND_MONTHS, convert),
     [expenses, currentMonth, convert],
@@ -99,11 +98,9 @@ export function Overview({ onAdd, onOpenCategory }: {
           <Stat label="Expenses" value={String(monthExpenses.length)} />
           <Stat label="Categories" value={String(totals.length)} />
         </dl>
-      </Card>
 
-      <section>
-        <SectionTitle>Where it went</SectionTitle>
-        <Card className="p-5">
+        {/* Ranked spend per category; each row opens Expenses filtered to it. */}
+        <div className="mt-4 border-t border-line pt-3">
           {monthTotal === 0 ? (
             <EmptyState
               icon={<Inbox size={32} />}
@@ -116,36 +113,29 @@ export function Overview({ onAdd, onOpenCategory }: {
               }
             />
           ) : (
-            <div className="lg:flex lg:items-center lg:gap-6">
-              <div className="lg:w-1/2 lg:shrink-0">
-                <CategoryDonut slices={slices} total={monthTotal} currency={displayCurrency} />
-              </div>
-              {/* Doubles as the legend and the table view: every slice is named
-                  and valued in ink, so identity never rests on colour alone. */}
-              <ul className="mt-5 space-y-1 lg:mt-0 lg:flex-1">
-                {totals.map((t) => (
-                  <li key={t.key}>
-                    <button
-                      type="button"
-                      onClick={() => onOpenCategory(t.key, month)}
-                      className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left
-                                 transition-colors hover:bg-raised"
-                    >
-                      <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: t.color }} />
-                      <span className="min-w-0 flex-1 truncate text-sm text-ink">{t.name}</span>
-                      <span className="tnum text-xs text-ink-3">{((t.value / monthTotal) * 100).toFixed(0)}%</span>
-                      <span className="tnum w-24 text-right text-sm font-medium text-ink">
-                        {money(t.value, displayCurrency)}
-                      </span>
-                      <ChevronRight size={14} className="shrink-0 text-ink-3" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
+            <ul className="space-y-1">
+              {totals.map((t) => (
+                <li key={t.key}>
+                  <button
+                    type="button"
+                    onClick={() => onOpenCategory(t.key, month)}
+                    className="flex w-full items-center gap-3 rounded-lg px-1 py-1.5 text-left
+                               transition-colors hover:bg-raised"
+                  >
+                    <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ background: t.color }} />
+                    <span className="min-w-0 flex-1 truncate text-sm text-ink">{t.name}</span>
+                    <span className="tnum text-xs text-ink-3">{((t.value / monthTotal) * 100).toFixed(0)}%</span>
+                    <span className="tnum w-24 text-right text-sm font-medium text-ink">
+                      {money(t.value, displayCurrency)}
+                    </span>
+                    <ChevronRight size={14} className="shrink-0 text-ink-3" />
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-        </Card>
-      </section>
+        </div>
+      </Card>
 
       <section>
         <SectionTitle>Monthly spend, last {TREND_MONTHS} months</SectionTitle>
