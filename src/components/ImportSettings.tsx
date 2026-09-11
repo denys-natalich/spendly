@@ -67,7 +67,7 @@ export function ImportSettings() {
         {progress ? (
           <div className="space-y-3 py-2">
             <p className="text-sm text-ink-2">{PHASE_LABEL[progress.phase]}</p>
-            {progress.phase === 'expenses' && (
+            {progress.phase !== 'categories' && progress.total > 1 && (
               <>
                 <div className="h-2 overflow-hidden rounded-full bg-raised">
                   <div

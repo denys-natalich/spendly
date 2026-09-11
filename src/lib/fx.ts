@@ -109,27 +109,41 @@ export function fromEur(amountEur: number, currency: Currency, rates: DayRates |
 }
 
 /**
- * Bulk-load every daily rate between two dates and cache them.
+ * Make sure every day in `days` has a rate, fetching and caching the ones that
+ * don't. Returns how many new days were cached.
  *
- * NBU's range endpoint returns the whole series in one request per currency, so
- * importing five years of history costs two calls rather than one per day.
- * Returns how many new days were cached.
+ * One request per missing day, a few at a time. NBU does have a range endpoint
+ * (NBU_Exchange/exchange_site) but it sends no CORS header, so a browser can
+ * never read it — the import used to fall through to a single nearest rate for
+ * every row. The per-day endpoint is the one that answers cross-origin, and a
+ * day is only ever fetched once: after that it lives in `fx_rates`.
  */
 export async function backfillRates(
-  from: string,
-  to: string,
+  days: string[],
   known: Map<string, DayRates>,
+  onProgress?: (done: number, total: number) => void,
 ): Promise<number> {
-  const [eur, usd] = await Promise.all([fetchSeries('eur', from, to), fetchSeries('usd', from, to)])
-  if (eur.size === 0 || usd.size === 0) return 0
+  const missing = [...new Set(days)].filter((d) => !known.has(d))
+  if (missing.length === 0) return 0
 
   const fresh: DayRates[] = []
-  for (const [day, uahPerEur] of eur) {
-    if (known.has(day)) continue
-    const uahPerUsd = usd.get(day)
-    if (!uahPerUsd) continue
-    fresh.push({ day, usd: uahPerEur / uahPerUsd, uah: uahPerEur })
+  let done = 0
+  let next = 0
+  onProgress?.(0, missing.length)
+
+  async function worker() {
+    while (next < missing.length) {
+      const day = missing[next++]
+      try {
+        const r = await fetchFromNbu(day)
+        if (r) fresh.push(r)
+      } catch {
+        /* Leave the gap; conversion falls back to the nearest known day. */
+      }
+      onProgress?.(++done, missing.length)
+    }
   }
+  await Promise.all(Array.from({ length: Math.min(BACKFILL_CONCURRENCY, missing.length) }, worker))
   if (fresh.length === 0) return 0
 
   // Another device may have cached some of these already; skip collisions
@@ -142,23 +156,6 @@ export async function backfillRates(
   return fresh.length
 }
 
-const RANGE = 'https://bank.gov.ua/NBU_Exchange/exchange_site'
-
-async function fetchSeries(valcode: string, from: string, to: string): Promise<Map<string, number>> {
-  const compactFrom = from.replaceAll('-', '')
-  const compactTo = to.replaceAll('-', '')
-  const url = `${RANGE}?start=${compactFrom}&end=${compactTo}&valcode=${valcode}&sort=exchangedate&order=asc&json`
-  const out = new Map<string, number>()
-  try {
-    const res = await fetch(url)
-    if (!res.ok) return out
-    const rows: Array<{ exchangedate: string; rate: number }> = await res.json()
-    for (const r of rows) {
-      const [d, m, y] = r.exchangedate.split('.')
-      if (d && m && y && r.rate > 0) out.set(`${y}-${m}-${d}`, r.rate)
-    }
-  } catch {
-    /* Offline or blocked — the caller falls back to per-day fetches. */
-  }
-  return out
-}
+/* Enough to get a few years of history in well under a minute without
+   hammering a public service. */
+const BACKFILL_CONCURRENCY = 6

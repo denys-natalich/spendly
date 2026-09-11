@@ -271,7 +271,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /*
    * Bulk import. Three phases, each reported so a five-year file doesn't look
    * like a hang:
-   *   rates      — one range request per currency, not one per day
+   *   rates      — one request per day not already cached, a few at a time
    *   categories — create whatever the file references and the account lacks
    *   expenses   — batched inserts, skipping rows already present
    *
@@ -284,12 +284,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       return { inserted: 0, skippedAsDuplicate: 0, categoriesCreated: [], ratesCached: 0 }
     }
 
-    const days = rows.map((r) => r.spent_on).sort()
     onProgress({ phase: 'rates', done: 0, total: 1 })
     const rateMap = ratesRef.current
-    const ratesCached = await backfillRates(days[0], days[days.length - 1], rateMap)
+    const ratesCached = await backfillRates(
+      rows.map((r) => r.spent_on),
+      rateMap,
+      (done, total) => onProgress({ phase: 'rates', done, total }),
+    )
     setRates(new Map(rateMap))
-    onProgress({ phase: 'rates', done: 1, total: 1 })
 
     // --- categories -------------------------------------------------------
     onProgress({ phase: 'categories', done: 0, total: 1 })
