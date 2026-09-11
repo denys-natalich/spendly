@@ -186,6 +186,9 @@ export function ExpenseSheet({ open, expense, onClose }: {
                 key={c.id}
                 ref={selected ? selectedRef : undefined}
                 type="button"
+                // Keep focus (and the phone keyboard) on whichever field had it;
+                // the row still scrolls, since that is driven by touch, not mouse.
+                onMouseDown={(e) => e.preventDefault()}
                 onClick={() => setCategoryId(c.id)}
                 aria-pressed={selected}
                 className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-2 text-sm

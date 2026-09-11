@@ -72,6 +72,8 @@ export function Segmented<T extends string>({
           role="tab"
           type="button"
           aria-selected={value === o.value}
+          // Don't steal focus from a text field — on a phone that drops the keyboard.
+          onMouseDown={(e) => e.preventDefault()}
           onClick={() => onChange(o.value)}
           className={`rounded-lg font-medium transition-colors ${compact ? 'px-2 py-1 text-xs' : 'px-3 py-1.5 text-sm'} ${
             value === o.value ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink-2'
