@@ -14,6 +14,7 @@ import { Login } from './components/Login'
 import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
 import { Setup } from './components/Setup'
+import { Toaster } from './components/Toaster'
 import { Card, Spinner } from './components/ui'
 import { DEFAULT_FILTER, type ExpenseFilter, type ExpensesView } from './lib/filters'
 import type { Expense } from './types'
@@ -196,6 +197,8 @@ export default function App() {
           </button>
         ))}
       </nav>
+
+      <Toaster />
 
       <ExpenseSheet open={sheetOpen} expense={editing} onClose={() => setSheetOpen(false)} />
 

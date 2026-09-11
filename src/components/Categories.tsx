@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { ICON_KEYS, assignColorSlot, iconFor, slotColor } from '../lib/icons'
+import { toast } from '../lib/toast'
 import type { Category } from '../types'
 import { Button, Card, Field, Sheet, inputClass } from './ui'
 
@@ -91,11 +92,12 @@ function CategorySheet({ open, category, nextSlot, onClose }: {
 
   const trimmed = name.trim()
 
-  async function run(fn: () => Promise<void>) {
+  async function run(fn: () => Promise<void>, done: string) {
     setBusy(true)
     setError(null)
     try {
       await fn()
+      toast(done)
       onClose()
     } catch (e) {
       const message = e instanceof Error ? e.message : 'Something went wrong.'
@@ -162,6 +164,7 @@ function CategorySheet({ open, category, nextSlot, onClose }: {
                 category
                   ? updateCategory(category.id, { name: trimmed, icon })
                   : addCategory({ name: trimmed, icon }),
+                category ? 'Category updated' : 'Category created',
               )
             }
           >
@@ -173,14 +176,21 @@ function CategorySheet({ open, category, nextSlot, onClose }: {
               <Button
                 variant="subtle"
                 className="flex-1"
-                onClick={() => run(() => updateCategory(category.id, { is_archived: !category.is_archived }))}
+                onClick={() =>
+                  run(
+                    () => updateCategory(category.id, { is_archived: !category.is_archived }),
+                    category.is_archived ? 'Category restored' : 'Category archived',
+                  )
+                }
               >
                 {category.is_archived ? 'Unarchive' : 'Archive'}
               </Button>
               <Button
                 variant="danger"
                 className="flex-1"
-                onClick={() => (confirmDelete ? run(() => deleteCategory(category.id)) : setConfirmDelete(true))}
+                onClick={() =>
+                  confirmDelete ? run(() => deleteCategory(category.id), 'Category deleted') : setConfirmDelete(true)
+                }
               >
                 <Trash2 size={16} />
                 {confirmDelete ? 'Tap again to confirm' : 'Delete'}

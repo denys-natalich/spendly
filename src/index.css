@@ -162,6 +162,11 @@
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* Confirmation toast: a short drop into place, nothing on the way out. */
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(-6px); }
+}
+
 /* Recharts draws its own focus outlines on wrappers; suppress the duplicate. */
 .recharts-wrapper:focus, .recharts-surface:focus { outline: none; }
 

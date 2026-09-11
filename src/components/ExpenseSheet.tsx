@@ -5,6 +5,7 @@ import { iconFor, slotColor } from '../lib/icons'
 import { money, symbolOf, today } from '../lib/format'
 import { nearestKnown, rateToEur } from '../lib/fx'
 import { collectNotes, matchNotes } from '../lib/notes'
+import { toast } from '../lib/toast'
 import { BASE_CURRENCY, CURRENCIES, type Currency, type Expense } from '../types'
 import { Button, Segmented, Sheet, inputClass } from './ui'
 
@@ -122,6 +123,7 @@ export function ExpenseSheet({ open, expense, onClose }: {
       }
       if (expense) await updateExpense(expense.id, draft)
       else await addExpense(draft)
+      toast(expense ? 'Expense updated' : 'Expense added')
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not save the expense.')
@@ -134,6 +136,7 @@ export function ExpenseSheet({ open, expense, onClose }: {
     setBusy(true)
     try {
       await deleteExpense(expense.id)
+      toast('Expense deleted')
       onClose()
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not delete the expense.')
