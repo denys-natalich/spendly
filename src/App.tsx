@@ -15,7 +15,7 @@ import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
 import { Setup } from './components/Setup'
 import { Card, Spinner } from './components/ui'
-import { DEFAULT_FILTER, type ExpenseFilter } from './lib/filters'
+import { DEFAULT_FILTER, type ExpenseFilter, type ExpensesView } from './lib/filters'
 import type { Expense } from './types'
 
 type Tab = 'overview' | 'expenses' | 'categories' | 'settings'
@@ -33,6 +33,7 @@ export default function App() {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [filter, setFilter] = useState<ExpenseFilter>(DEFAULT_FILTER)
+  const [expensesView, setExpensesView] = useState<ExpensesView>('days')
   const lock = useAppLock(Boolean(session))
   const [lockPrompt, setLockPrompt] = useState(false)
 
@@ -63,6 +64,7 @@ export default function App() {
       range: { kind: 'month', month },
       query: '',
     })
+    setExpensesView('days')
     setTab('expenses')
   }
 
@@ -140,6 +142,8 @@ export default function App() {
                 <Expenses
                   filter={filter}
                   onFilterChange={setFilter}
+                  view={expensesView}
+                  onViewChange={setExpensesView}
                   onEdit={openEdit}
                   onAdd={openNew}
                 />

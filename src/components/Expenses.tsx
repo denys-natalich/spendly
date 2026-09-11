@@ -1,12 +1,12 @@
-import { useMemo } from 'react'
-import { ChevronLeft, ChevronRight, Inbox, Search, X } from 'lucide-react'
+import { useMemo, type ReactNode } from 'react'
+import { CalendarDays, ChevronLeft, ChevronRight, Inbox, Search, Tags, X } from 'lucide-react'
 import { useStore } from '../store'
-import { groupByDay, total } from '../lib/analytics'
-import { applyFilter, rangeLabel, type DateRange, type ExpenseFilter } from '../lib/filters'
+import { byCategory, groupByDay, total } from '../lib/analytics'
+import { applyFilter, rangeLabel, type DateRange, type ExpenseFilter, type ExpensesView } from '../lib/filters'
 import { addMonths, dayLabel, money, monthKey, monthLabel, today } from '../lib/format'
 import { iconFor, slotColor, UNCATEGORISED_COLOR } from '../lib/icons'
 import type { Expense } from '../types'
-import { Card, EmptyState, inputClass } from './ui'
+import { Card, EmptyState, Segmented, inputClass } from './ui'
 
 type Preset = 'last7' | 'last30' | 'month' | 'custom' | 'all'
 
@@ -39,9 +39,11 @@ function rangeFor(preset: Preset, current: DateRange): DateRange {
   }
 }
 
-export function Expenses({ filter, onFilterChange, onEdit, onAdd }: {
+export function Expenses({ filter, onFilterChange, view, onViewChange, onEdit, onAdd }: {
   filter: ExpenseFilter
   onFilterChange: (f: ExpenseFilter) => void
+  view: ExpensesView
+  onViewChange: (v: ExpensesView) => void
   onEdit: (e: Expense) => void
   onAdd: () => void
 }) {
@@ -59,6 +61,7 @@ export function Expenses({ filter, onFilterChange, onEdit, onAdd }: {
   )
   const days = useMemo(() => groupByDay(filtered, convert), [filtered, convert])
   const filteredTotal = useMemo(() => total(filtered, convert), [filtered, convert])
+  const totals = useMemo(() => byCategory(filtered, categories, convert), [filtered, categories, convert])
 
   const preset = presetOf(filter.range)
   const set = (patch: Partial<ExpenseFilter>) => onFilterChange({ ...filter, ...patch })
@@ -92,23 +95,37 @@ export function Expenses({ filter, onFilterChange, onEdit, onAdd }: {
           </select>
         </div>
 
-        {/* Presets scroll rather than wrap, so the row height never jumps. */}
-        <div className="no-scrollbar -mx-4 flex gap-1.5 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
-          {PRESETS.map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => set({ range: rangeFor(p.id, filter.range) })}
-              aria-pressed={preset === p.id}
-              className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
-                preset === p.id
-                  ? 'border-transparent bg-accent text-accent-in'
-                  : 'border-line text-ink-2 hover:bg-raised'
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          {/* Presets scroll rather than wrap, so the row height never jumps. */}
+          <div className="no-scrollbar -ml-4 flex min-w-0 flex-1 gap-1.5 overflow-x-auto py-0.5 pl-4 md:ml-0 md:pl-0">
+            {PRESETS.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => set({ range: rangeFor(p.id, filter.range) })}
+                aria-pressed={preset === p.id}
+                className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  preset === p.id
+                    ? 'border-transparent bg-accent text-accent-in'
+                    : 'border-line text-ink-2 hover:bg-raised'
+                }`}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+          <div className="shrink-0">
+            <Segmented
+              compact
+              ariaLabel="View"
+              value={view}
+              onChange={onViewChange}
+              options={[
+                { value: 'days', label: <ViewLabel icon={<CalendarDays size={15} />} text="By day" /> },
+                { value: 'categories', label: <ViewLabel icon={<Tags size={15} />} text="By category" /> },
+              ]}
+            />
+          </div>
         </div>
 
         {/* A stepper rather than <input type="month">: the native control renders
@@ -194,7 +211,7 @@ export function Expenses({ filter, onFilterChange, onEdit, onAdd }: {
         </div>
       </div>
 
-      {days.length === 0 ? (
+      {filtered.length === 0 ? (
         <Card>
           <EmptyState
             icon={<Inbox size={32} />}
@@ -220,6 +237,46 @@ export function Expenses({ filter, onFilterChange, onEdit, onAdd }: {
               )
             }
           />
+        </Card>
+      ) : view === 'categories' ? (
+        /* Same filters as the day list; tapping a row drills into that
+           category's expenses for the range. */
+        <Card className="divide-y divide-line overflow-hidden">
+          {totals.map((t) => {
+            const cat = catIndex.get(t.key)
+            const Icon = iconFor(cat?.icon)
+            return (
+              <button
+                key={t.key}
+                type="button"
+                onClick={() => {
+                  onFilterChange({ ...filter, category: t.key === 'uncategorised' ? 'none' : t.key })
+                  onViewChange('days')
+                }}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-raised"
+              >
+                <span
+                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
+                  style={{ background: `color-mix(in oklab, ${t.color} 16%, transparent)` }}
+                >
+                  <Icon size={17} style={{ color: t.color }} />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-medium">{t.name}</span>
+                  <span className="tnum block text-xs text-ink-3">
+                    {t.count} {t.count === 1 ? 'expense' : 'expenses'}
+                  </span>
+                </span>
+                <span className="text-right">
+                  <span className="tnum block text-sm font-semibold">{money(t.value, displayCurrency)}</span>
+                  <span className="tnum block text-xs text-ink-3">
+                    {filteredTotal > 0 ? ((t.value / filteredTotal) * 100).toFixed(0) : 0}%
+                  </span>
+                </span>
+                <ChevronRight size={14} className="shrink-0 text-ink-3" />
+              </button>
+            )
+          })}
         </Card>
       ) : (
         days.map((group) => (
@@ -269,5 +326,15 @@ export function Expenses({ filter, onFilterChange, onEdit, onAdd }: {
         ))
       )}
     </div>
+  )
+}
+
+/** Icon-only on phones, where the preset row needs the width; labelled from `sm` up. */
+function ViewLabel({ icon, text }: { icon: ReactNode; text: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      {icon}
+      <span className="sr-only sm:not-sr-only">{text}</span>
+    </span>
   )
 }

@@ -16,6 +16,9 @@ export interface ExpenseFilter {
   query: string
 }
 
+/** Expenses tab: one row per expense grouped by day, or one row per category. */
+export type ExpensesView = 'days' | 'categories'
+
 export const DEFAULT_FILTER: ExpenseFilter = {
   category: 'all',
   range: { kind: 'last', days: 30 },

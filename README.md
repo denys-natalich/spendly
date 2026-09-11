@@ -9,7 +9,9 @@ read back in any of the three currencies from a switch on the overview.
   tapping a category opens its expenses for the month being viewed.
 - **Expenses** — day-grouped list with search, category filter and a date range (last 7 or 30 days,
   a specific month, a custom range, or all time). Amounts lead with the reporting currency; what was
-  actually paid sits underneath. Tap any row to edit or delete.
+  actually paid sits underneath. Tap any row to edit or delete. A switch beside the ranges regroups
+  the same filtered expenses by category — total, count and share each — and tapping a category
+  drills back into its expenses for that range.
 - **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, account.
 

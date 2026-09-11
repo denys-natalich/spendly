@@ -2,23 +2,13 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { ICON_KEYS, assignColorSlot, iconFor, slotColor } from '../lib/icons'
-import { money } from '../lib/format'
-import { total } from '../lib/analytics'
 import type { Category } from '../types'
 import { Button, Card, Field, Sheet, inputClass } from './ui'
 
 export function Categories() {
-  const { categories, expenses, convert, displayCurrency } = useStore()
+  const { categories } = useStore()
   const [editing, setEditing] = useState<Category | null>(null)
   const [creating, setCreating] = useState(false)
-
-  const spendByCategory = useMemo(() => {
-    const map = new Map<string, number>()
-    for (const c of categories) {
-      map.set(c.id, total(expenses.filter((e) => e.category_id === c.id), convert))
-    }
-    return map
-  }, [categories, expenses, convert])
 
   // Shown in the sheet before the category exists, so the colour it is about to
   // be given is visible while naming it rather than a surprise afterwards.
@@ -45,14 +35,9 @@ export function Categories() {
               >
                 <Icon size={17} style={{ color }} />
               </span>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-medium">
-                  {c.name}
-                  {c.is_archived && <span className="ml-2 text-xs font-normal text-ink-3">archived</span>}
-                </span>
-                <span className="tnum block text-xs text-ink-3">
-                  {money(spendByCategory.get(c.id) ?? 0, displayCurrency)} all time
-                </span>
+              <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                {c.name}
+                {c.is_archived && <span className="ml-2 text-xs font-normal text-ink-3">archived</span>}
               </span>
               <button
                 type="button"
