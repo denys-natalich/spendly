@@ -12,6 +12,10 @@ read back in any of the three currencies from a switch on the overview.
   actually paid sits underneath. Tap any row to edit or delete. A switch beside the ranges regroups
   the same filtered expenses by category — total, count and share each — and tapping a category
   drills back into its expenses for that range.
+- **Travel** — trips with the people on them, and expenses recorded against whoever paid. A trip
+  shows what it cost, what each person put in, and — if it were split evenly — who is owed and who
+  owes. Travel money is held in its own tables, so it never reaches the overview, the categories or
+  the trend.
 - **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, account.
 
@@ -30,10 +34,13 @@ Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password au
 ### 2. Create the tables
 
 Open **SQL Editor → New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql),
-and run it. It creates three tables (`categories`, `expenses`, `fx_rates`), turns on row level
-security, and adds policies so you can only ever read and write your own rows.
+and run it. It creates six tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
+`trip_expenses` for the Travel section), turns on row level security, and adds policies so you can
+only ever read and write your own rows.
 
-Safe to re-run — every statement is guarded.
+Safe to re-run — every statement is guarded. **Upgrading an existing project** that predates the
+Travel section: run [`supabase/2026-09-travel.sql`](supabase/2026-09-travel.sql), which adds only
+the three travel tables and touches nothing that already holds data.
 
 ### 3. Point the app at your project
 
@@ -178,6 +185,30 @@ bar nor an inspector, that's a high bar.
 
 ---
 
+## Travel
+
+A trip is a name and the people on it. Every expense inside it records **who paid**, in place of the
+category a personal expense carries — which is the whole reason a trip is worth tracking separately.
+Travellers are just names: nobody else needs the app, or an account.
+
+**Travel spending never touches your own numbers.** It lives in `trips`, `travellers` and
+`trip_expenses`, not behind a flag on `expenses`, so the monthly total, the category breakdown, the
+trend and the Monefy import cannot see it even by accident. Money fronted for four people is not
+your spending, and one forgotten `where` clause would have made it look like it was.
+
+Everything else works as it does elsewhere: amounts in EUR, USD or UAH, converted at the rate of the
+day they were spent, and read back in whichever currency the overview is set to.
+
+Under the trip total, each traveller shows what they paid and where an even split leaves them —
+`gets back` when they fronted more than their share, `owes` when they fronted less. The split is a
+reading of the same numbers, not a second thing to keep up to date; nothing about it is stored.
+
+Removing someone from a trip keeps what they paid: those expenses stay in the total and show as
+*Unassigned*, because losing who paid is recoverable and losing the amount is not. Deleting a whole
+trip does delete its expenses, and says so before it does.
+
+---
+
 ## Importing from Monefy
 
 **Settings → Import** takes a Monefy CSV export. It parses the file, shows you what it found and how
@@ -232,7 +263,7 @@ Two things make historical totals trustworthy:
 ```
 src/
   store.tsx            auth session + all data loading and mutations
-  types.ts             Currency, Category, Expense, BASE_CURRENCY
+  types.ts             Currency, Category, Expense, Trip, Traveller, BASE_CURRENCY
   lib/
     supabase.ts        client (falls back to a setup screen if unconfigured)
     fx.ts              NBU fetch, rate cache, EUR conversion
@@ -243,15 +274,21 @@ src/
     lock.ts            WebAuthn platform credential, device-local
     avatar.ts          crop/scale, private-bucket upload, signed URL
     convert.ts         restates expenses in the display currency
+    useTravel.ts       trips, travellers and trip expenses — their own store
     useAppLock.ts      locks on leaving the foreground
   components/
     Overview.tsx  Expenses.tsx  Categories.tsx  Settings.tsx
     Login.tsx  LockScreen.tsx  LockSettings.tsx  PasswordSettings.tsx
     ExpenseSheet.tsx   add / edit / delete an expense
+    Travel.tsx         trip list + the create / edit trip sheet
+    TripDetail.tsx     one trip: total, who paid what, its expenses
+    TripExpenseSheet.tsx  add / edit / delete a trip expense
+    TravellerBadge.tsx a traveller's monogram in their trip colour
     charts.tsx         monthly trend (Recharts)
     ui.tsx             Card, Button, Field, Sheet, Segmented, …
 supabase/schema.sql    tables, RLS policies
 supabase/avatars.sql   private avatar bucket + storage policies
+supabase/2026-09-travel.sql  travel tables, for a project created before them
 ```
 
 ### Chart colours
@@ -278,4 +315,6 @@ Past sixteen the least-used colour comes round again rather than a new one being
 ## Possible next steps
 
 Not built, in rough order of usefulness: monthly budgets per category, recurring expenses,
-CSV export/import, receipt photos (Supabase Storage), and code-splitting the charts bundle.
+uneven trip splits (shares per person, or an expense that only some travellers were in on),
+categories on trip expenses, CSV export/import, receipt photos (Supabase Storage), and
+code-splitting the charts bundle.

@@ -8,12 +8,13 @@ import { backfillRates, ensureRatesFor, loadCachedRates, nearestKnown, rateToEur
 import { makeConverter, type Convert } from './lib/convert'
 import { getAvatarUrl, removeAvatar, uploadAvatar } from './lib/avatar'
 import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
+import { useTravel, type TravelStore } from './lib/useTravel'
 import { today } from './lib/format'
 import { assignColorSlot, recolourCollisions } from './lib/icons'
 import { BASE_CURRENCY, CURRENCIES } from './types'
 import type { Category, Currency, DayRates, Expense, ExpenseDraft } from './types'
 
-interface Store {
+interface Store extends TravelStore {
   session: Session | null
   authLoading: boolean
   loading: boolean
@@ -190,14 +191,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true }
   }, [userId])
 
-  const resolveRate = useCallback(async (draft: ExpenseDraft) => {
-    if (draft.currency === 'EUR') return 1
+  /** Takes anything with a currency and a day: a personal draft or a travel one. */
+  const resolveRate = useCallback(async (of: { currency: Currency; spent_on: string }) => {
+    if (of.currency === 'EUR') return 1
     const map = ratesRef.current
     const before = map.size
-    const day = await ensureRatesFor(draft.spent_on, map)
+    const day = await ensureRatesFor(of.spent_on, map)
     if (map.size !== before) setRates(new Map(map))
-    return rateToEur(draft.currency, day ?? nearestKnown(draft.spent_on, map))
+    return rateToEur(of.currency, day ?? nearestKnown(of.spent_on, map))
   }, [])
+
+  // Trips keep their own state and their own tables; the rate cache is the one
+  // thing they borrow, so travel spending converts like everything else.
+  const travel = useTravel(userId, resolveRate)
 
   const addExpense = useCallback(async (draft: ExpenseDraft) => {
     if (!userId) return
@@ -415,6 +421,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     avatarUrl, setAvatar, clearAvatar,
     signIn, setPassword, signOut, addExpense, updateExpense, deleteExpense,
     addCategory, updateCategory, deleteCategory, importExpenses,
+    ...travel,
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

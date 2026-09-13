@@ -1,7 +1,8 @@
 import { rateToEur } from './fx'
-import type { Currency, DayRates, Expense } from '../types'
+import type { Convertible, Currency, DayRates } from '../types'
 
-export type Convert = (e: Expense) => number
+/** Takes anything with an amount, a currency and a day — a personal or a travel expense. */
+export type Convert = (e: Convertible) => number
 
 /**
  * Builds a function that restates any expense in `currency`.
