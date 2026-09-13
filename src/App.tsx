@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChartPie, ListPlus, Plus, Settings as SettingsIcon, Tag, Wallet } from 'lucide-react'
+import { ChartPie, ListPlus, Plane, Plus, Settings as SettingsIcon, Tag, Wallet } from 'lucide-react'
 import { isConfigured } from './lib/supabase'
 import { useAppLock } from './lib/useAppLock'
 import { lockPromptSeen, markLockPromptSeen } from './lib/lock'
@@ -13,17 +13,19 @@ import { LockSetupSheet } from './components/LockSettings'
 import { Login } from './components/Login'
 import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
+import { Travel } from './components/Travel'
 import { Setup } from './components/Setup'
 import { Toaster } from './components/Toaster'
 import { Card, Spinner } from './components/ui'
 import { DEFAULT_FILTER, type ExpenseFilter, type ExpensesView } from './lib/filters'
 import type { Expense } from './types'
 
-type Tab = 'overview' | 'expenses' | 'categories' | 'settings'
+type Tab = 'overview' | 'expenses' | 'travel' | 'categories' | 'settings'
 
 const TABS: Array<{ id: Tab; label: string; icon: typeof ChartPie }> = [
   { id: 'overview', label: 'Overview', icon: ChartPie },
   { id: 'expenses', label: 'Expenses', icon: ListPlus },
+  { id: 'travel', label: 'Travel', icon: Plane },
   { id: 'categories', label: 'Categories', icon: Tag },
   { id: 'settings', label: 'Settings', icon: SettingsIcon },
 ]
@@ -149,6 +151,7 @@ export default function App() {
                   onAdd={openNew}
                 />
               )}
+              {tab === 'travel' && <Travel />}
               {tab === 'categories' && <Categories />}
               {tab === 'settings' && (
                 <Settings
@@ -164,7 +167,8 @@ export default function App() {
 
       {/* Mobile FAB — sits above the tab bar and the home indicator. Only on the
           tabs where logging an expense is the primary action; Categories has its
-          own primary button and Settings has none. */}
+          own primary button and Settings has none. Travel brings its own, which
+          adds to the open trip rather than to the personal ledger. */}
       {(tab === 'overview' || tab === 'expenses') && <button
         type="button"
         onClick={openNew}
@@ -179,7 +183,7 @@ export default function App() {
       {/* Mobile tab bar */}
       <nav
         aria-label="Sections"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-4 border-t border-line bg-surface/95
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95
                    pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         {TABS.map(({ id, label, icon: Icon }) => (
@@ -188,7 +192,7 @@ export default function App() {
             type="button"
             onClick={() => setTab(id)}
             aria-current={tab === id ? 'page' : undefined}
-            className={`flex flex-col items-center gap-1 py-2.5 text-[11px] transition-colors ${
+            className={`flex flex-col items-center gap-1 px-0.5 py-2.5 text-[11px] transition-colors ${
               tab === id ? 'text-accent' : 'text-ink-3'
             }`}
           >

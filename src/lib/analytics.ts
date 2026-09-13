@@ -1,4 +1,4 @@
-import type { Category, Expense } from '../types'
+import type { Category, Convertible, Expense, Traveller, TripExpense } from '../types'
 import type { Convert } from './convert'
 import { addMonths, monthKey } from './format'
 import { UNCATEGORISED_COLOR, slotColor } from './icons'
@@ -8,7 +8,7 @@ export function expensesInMonth(expenses: Expense[], key: string): Expense[] {
   return expenses.filter((e) => monthKey(e.spent_on) === key)
 }
 
-export function total(expenses: Expense[], convert: Convert): number {
+export function total(expenses: Convertible[], convert: Convert): number {
   return expenses.reduce((sum, e) => sum + convert(e), 0)
 }
 
@@ -61,11 +61,12 @@ export function monthlyTrend(
   })
 }
 
-export function groupByDay(
-  expenses: Expense[],
+/** Generic over the row type, so the travel list can reuse the day grouping. */
+export function groupByDay<T extends Convertible>(
+  expenses: T[],
   convert: Convert,
-): Array<{ day: string; items: Expense[]; total: number }> {
-  const days = new Map<string, Expense[]>()
+): Array<{ day: string; items: T[]; total: number }> {
+  const days = new Map<string, T[]>()
   for (const e of expenses) {
     const list = days.get(e.spent_on)
     if (list) list.push(e)
@@ -74,4 +75,61 @@ export function groupByDay(
   return [...days.entries()]
     .sort((a, b) => b[0].localeCompare(a[0]))
     .map(([day, items]) => ({ day, items, total: total(items, convert) }))
+}
+
+/** Stands in for a traveller who was removed after paying for something. */
+export const UNASSIGNED = 'unassigned'
+
+export interface TravellerTotal {
+  key: string
+  name: string
+  color: string
+  /** What this person actually put on the table, in the reporting currency. */
+  paid: number
+  count: number
+  /** Their share if the trip is split evenly between everyone on it. */
+  share: number
+  /** paid − share: positive means the trip owes them, negative means they owe it. */
+  balance: number
+}
+
+/**
+ * Per-person totals for one trip, biggest payer first. Everyone on the trip is
+ * listed, including those who have not paid for anything yet — a zero row is
+ * how you see that someone owes their whole share.
+ *
+ * Expenses whose traveller was removed keep their money in the trip total and
+ * collect under an "Unassigned" row, which carries no share of its own.
+ */
+export function byTraveller(
+  expenses: TripExpense[],
+  travellers: Traveller[],
+  convert: Convert,
+): TravellerTotal[] {
+  const rows = new Map<string, TravellerTotal>()
+  travellers.forEach((t, i) => {
+    rows.set(t.id, {
+      key: t.id, name: t.name, color: slotColor(i + 1), paid: 0, count: 0, share: 0, balance: 0,
+    })
+  })
+
+  let spent = 0
+  for (const e of expenses) {
+    const value = convert(e)
+    spent += value
+    const row = rows.get(e.traveller_id ?? UNASSIGNED) ?? {
+      key: UNASSIGNED, name: 'Unassigned', color: UNCATEGORISED_COLOR, paid: 0, count: 0, share: 0, balance: 0,
+    }
+    row.paid += value
+    row.count += 1
+    rows.set(row.key, row)
+  }
+
+  const share = travellers.length > 0 ? spent / travellers.length : 0
+  for (const row of rows.values()) {
+    row.share = row.key === UNASSIGNED ? 0 : share
+    row.balance = row.paid - row.share
+  }
+
+  return [...rows.values()].sort((a, b) => b.paid - a.paid || a.name.localeCompare(b.name))
 }

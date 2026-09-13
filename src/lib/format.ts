@@ -22,6 +22,11 @@ export function moneyShort(amount: number, currency: Currency): string {
   return `${SYMBOL[currency]}${Math.round(amount)}`
 }
 
+/** Monogram for a person: travellers are entered as first names, so one letter. */
+export function initialOf(name: string): string {
+  return name.trim().charAt(0).toUpperCase() || '?'
+}
+
 export function today(): string {
   return toISODate(new Date())
 }
