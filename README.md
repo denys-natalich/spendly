@@ -15,7 +15,8 @@ read back in any of the three currencies from a switch on the overview.
 - **Travel** — trips with the people on them, and expenses recorded against whoever paid. A trip
   shows what it cost, what each person put in, and — if it were split evenly — who is owed and who
   owes. Travel money is held in its own tables, so it never reaches the overview, the categories or
-  the trend.
+  the trend. A trip can be **shared by link**, so the rest of the group can add what they spent
+  without an account of their own.
 - **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, sync, account.
 
@@ -38,13 +39,19 @@ IndexedDB for the local copy.
 ### 2. Create the tables
 
 Open **SQL Editor → New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql),
-and run it. It creates six tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
-`trip_expenses` for the Travel section), turns on row level security, and adds policies so you can
-only ever read and write your own rows.
+and run it. It creates seven tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
+`trip_expenses`, `trip_shares` for the Travel section), turns on row level security, adds policies so
+you can only ever read and write your own rows, and defines the four functions a shared trip's link
+holder goes through.
 
-Safe to re-run — every statement is guarded. **Upgrading an existing project** that predates the
-Travel section: run [`supabase/2026-09-travel.sql`](supabase/2026-09-travel.sql), which adds only
-the three travel tables and touches nothing that already holds data.
+Safe to re-run — every statement is guarded. **Upgrading an existing project:**
+
+| Your project predates | Run |
+| --- | --- |
+| the Travel section | [`supabase/2026-09-travel.sql`](supabase/2026-09-travel.sql) |
+| shared trips | [`supabase/2026-09-trip-sharing.sql`](supabase/2026-09-trip-sharing.sql) |
+
+Each adds only what is new and touches nothing that already holds data.
 
 ### 3. Point the app at your project
 
@@ -213,6 +220,41 @@ Removing someone from a trip keeps what they paid: those expenses stay in the to
 *Unassigned*, because losing who paid is recoverable and losing the amount is not. Deleting a whole
 trip does delete its expenses, and says so before it does.
 
+### Sharing a trip
+
+A trip is shared spending, so the people on it are the ones who know what was spent. **Share** on a
+trip makes a link; anyone who opens it sees the trip and can add what they paid for, and it lands in
+your account as though you had typed it in yourself.
+
+They need no account and never make one. What the link allows is deliberately small:
+
+| A link holder can | A link holder cannot |
+| --- | --- |
+| see that one trip — its expenses, who paid, the even split | see any other trip, or a single personal expense |
+| add expenses to it | rename or delete the trip, or remove anybody |
+| edit and delete **the expenses they added through that link** | touch your rows, or another link holder's |
+| add themselves to the trip by name | reach any table directly — `anon` has no grant on one |
+
+Everything a link holder does goes through four `security definer` functions that take the token as
+their only credential and resolve it to exactly one trip before touching anything. Row level
+security is never loosened for them; see the comments in
+[`supabase/2026-09-trip-sharing.sql`](supabase/2026-09-trip-sharing.sql).
+
+The token is treated like the credential it is. It is 32 random bytes; only its SHA-256 is stored,
+so the database never holds anything that opens the link; and it rides in the URL **fragment**,
+which browsers do not send to servers — so it stays out of request logs and out of `Referer`
+headers on the way to the app. Because only the hash is stored, the link cannot be shown again on a
+device that did not create it: the phone that made it keeps a copy so it can be copied again, and
+anywhere else the trip offers to replace it instead. **Switch this link off** revokes it for
+everyone at once and keeps every expense that came in through it.
+
+Opening a shared trip works with no connection, exactly as the rest of the app does — the same
+local copy, the same queue. One thing needs a connection: adding yourself to the trip as a new
+person, because a traveller invented offline would have an id only that phone knows about, and the
+expenses pointing at it would have nowhere to land. And a rate a link holder cannot look up (they
+have no access to the rate table) is filled in by the database as it writes the row, from the day
+the money was actually spent.
+
 ---
 
 ## Working offline
@@ -316,6 +358,8 @@ src/
     sync.ts            the outbox — queued changes, replayed when there is a connection
     identity.ts        the remembered account, so an offline start is not a sign-out
     ids.ts             device-minted row ids
+    share.ts           share links: tokens, the join route, the four link-holder calls
+    useSharedTrip.ts   a trip seen through a link — its own store, no account
     fx.ts              NBU fetch, rate cache (server + device), EUR conversion
     analytics.ts       month/category/trend selectors
     format.ts          money, date and month formatting
@@ -332,7 +376,9 @@ src/
     ExpenseSheet.tsx   add / edit / delete an expense
     Travel.tsx         trip list + the create / edit trip sheet
     TripDetail.tsx     one trip: total, who paid what, its expenses
-    TripExpenseSheet.tsx  add / edit / delete a trip expense
+    TripExpenseSheet.tsx  add / edit / delete a trip expense, for owner and guest alike
+    ShareTrip.tsx      the owner's side of a link: make it, copy it, switch it off
+    SharedTrip.tsx     the whole app a link holder gets
     TravellerBadge.tsx a traveller's monogram in their trip colour
     SyncStatus.tsx     the offline / queued badge, and the Sync section in Settings
     charts.tsx         monthly trend (Recharts)
@@ -340,6 +386,7 @@ src/
 supabase/schema.sql    tables, RLS policies
 supabase/avatars.sql   private avatar bucket + storage policies
 supabase/2026-09-travel.sql  travel tables, for a project created before them
+supabase/2026-09-trip-sharing.sql  share links + the functions a link holder calls
 ```
 
 ### Chart colours

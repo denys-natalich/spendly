@@ -1,28 +1,49 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Trash2 } from 'lucide-react'
-import { useStore } from '../store'
 import { slotColor } from '../lib/icons'
 import { money, symbolOf, today } from '../lib/format'
 import { nearestKnown, rateToEur } from '../lib/fx'
 import { toast } from '../lib/toast'
-import { BASE_CURRENCY, CURRENCIES, type Currency, type Traveller, type Trip, type TripExpense } from '../types'
+import { BASE_CURRENCY, CURRENCIES, type Currency, type DayRates, type TripExpenseDraft } from '../types'
 import { TravellerBadge } from './TravellerBadge'
 import { Button, Segmented, Sheet, inputClass } from './ui'
+
+/** All the sheet needs of a row, so a shared trip can hand it one too. */
+export interface EditableTripExpense {
+  id: string
+  traveller_id: string | null
+  amount: number
+  currency: Currency
+  spent_on: string
+  note: string | null
+}
 
 /**
  * The travel twin of the expense sheet: same amount row, same currencies, same
  * rates — with who paid in place of the category, which is the whole point of
  * recording a trip separately.
+ *
+ * Saving and deleting arrive as props rather than being taken from the account
+ * store, because the same sheet serves someone who has no account: a link
+ * holder writes through the trip's share instead. The fields, the rate line
+ * and the validation are then the same on both sides by construction.
  */
-export function TripExpenseSheet({ open, trip, travellers, expense, onClose }: {
+export function TripExpenseSheet({
+  open, tripName, travellers, expense, rates, defaultTravellerId, onSave, onDelete, onClose,
+}: {
   open: boolean
-  trip: Trip
-  travellers: Traveller[]
-  expense: TripExpense | null
+  tripName: string
+  travellers: Array<{ id: string; name: string }>
+  expense: EditableTripExpense | null
+  rates: Map<string, DayRates>
+  /** Who a new expense is attributed to before anyone touches the row of
+   *  people — the person holding the phone, when that is known. */
+  defaultTravellerId?: string | null
+  onSave: (draft: TripExpenseDraft, id: string | null) => Promise<void>
+  /** Absent when this row is not the viewer's to remove. */
+  onDelete?: (id: string) => Promise<void>
   onClose: () => void
 }) {
-  const { rates, addTripExpense, updateTripExpense, deleteTripExpense } = useStore()
-
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState<Currency>(BASE_CURRENCY)
   const [travellerId, setTravellerId] = useState<string | null>(null)
@@ -44,10 +65,10 @@ export function TripExpenseSheet({ open, trip, travellers, expense, onClose }: {
     setBusy(false)
     setAmount(expense ? String(expense.amount) : '')
     setCurrency(expense?.currency ?? BASE_CURRENCY)
-    setTravellerId(expense ? expense.traveller_id : travellers[0]?.id ?? null)
+    setTravellerId(expense ? expense.traveller_id : defaultTravellerId ?? travellers[0]?.id ?? null)
     setSpentOn(expense?.spent_on ?? today())
     setNote(expense?.note ?? '')
-  }, [open, expense, travellers])
+  }, [open, expense, travellers, defaultTravellerId])
 
   const parsed = Number(amount.replace(',', '.'))
   const valid = Number.isFinite(parsed) && parsed > 0 && travellerId !== null
@@ -68,8 +89,7 @@ export function TripExpenseSheet({ open, trip, travellers, expense, onClose }: {
         spent_on: spentOn,
         note: note.trim() || null,
       }
-      if (expense) await updateTripExpense(expense.id, draft)
-      else await addTripExpense(trip.id, draft)
+      await onSave(draft, expense?.id ?? null)
       toast(expense ? 'Expense updated' : 'Expense added')
       onClose()
     } catch (e) {
@@ -79,10 +99,10 @@ export function TripExpenseSheet({ open, trip, travellers, expense, onClose }: {
   }
 
   async function remove() {
-    if (!expense) return
+    if (!expense || !onDelete) return
     setBusy(true)
     try {
-      await deleteTripExpense(expense.id)
+      await onDelete(expense.id)
       toast('Expense deleted')
       onClose()
     } catch (e) {
@@ -94,7 +114,7 @@ export function TripExpenseSheet({ open, trip, travellers, expense, onClose }: {
   return (
     <Sheet
       open={open}
-      title={expense ? 'Edit trip expense' : `New expense · ${trip.name}`}
+      title={expense ? 'Edit trip expense' : `New expense · ${tripName}`}
       onClose={onClose}
     >
       <div className="space-y-3.5">
@@ -193,7 +213,7 @@ export function TripExpenseSheet({ open, trip, travellers, expense, onClose }: {
           <Button onClick={save} busy={busy} disabled={!valid} className="flex-1">
             {expense ? 'Save changes' : 'Add expense'}
           </Button>
-          {expense && (
+          {expense && onDelete && (
             <Button variant="danger" onClick={remove} aria-label="Delete expense">
               <Trash2 size={16} />
             </Button>

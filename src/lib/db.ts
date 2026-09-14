@@ -16,7 +16,7 @@
  */
 
 const DB_NAME = 'spendly'
-const DB_VERSION = 1
+const DB_VERSION = 2
 
 export type LocalStore =
   | 'categories'
@@ -25,6 +25,7 @@ export type LocalStore =
   | 'travellers'
   | 'trip_expenses'
   | 'fx_rates'
+  | 'shared_trips'
   | 'outbox'
   | 'meta'
 
@@ -35,6 +36,10 @@ const SCHEMA: Record<LocalStore, IDBObjectStoreParameters> = {
   travellers: { keyPath: 'id' },
   trip_expenses: { keyPath: 'id' },
   fx_rates: { keyPath: 'day' },
+  // One record per share link opened on this device: the whole trip as it was
+  // last seen. Kept apart from the account's own stores above — a link holder
+  // is not the owner, and their copy must never mix with an owner's.
+  shared_trips: { keyPath: 'token' },
   // The queue of local changes waiting for a connection. `seq` is assigned by
   // IndexedDB and is the order they will be replayed in.
   outbox: { keyPath: 'seq', autoIncrement: true },

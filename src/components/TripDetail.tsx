@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { ArrowLeft, Inbox, Pencil, Plus } from 'lucide-react'
+import { ArrowLeft, Inbox, Pencil, Plus, Share2 } from 'lucide-react'
 import { useStore } from '../store'
 import { UNASSIGNED, byTraveller, groupByDay, total } from '../lib/analytics'
 import { dayLabel, money } from '../lib/format'
 import { UNCATEGORISED_COLOR, slotColor } from '../lib/icons'
 import type { Currency, Traveller, Trip, TripExpense } from '../types'
+import { ShareTrip } from './ShareTrip'
 import { TravellerBadge } from './TravellerBadge'
 import { TripExpenseSheet } from './TripExpenseSheet'
 import { Button, Card, EmptyState, SectionTitle } from './ui'
@@ -15,8 +16,9 @@ export function TripDetail({ trip, travellers, onBack, onEditTrip }: {
   onBack: () => void
   onEditTrip: () => void
 }) {
-  const { tripExpenses, convert, displayCurrency } = useStore()
+  const { tripExpenses, rates, convert, displayCurrency, addTripExpense, updateTripExpense, deleteTripExpense } = useStore()
   const [sheetOpen, setSheetOpen] = useState(false)
+  const [shareOpen, setShareOpen] = useState(false)
   const [editing, setEditing] = useState<TripExpense | null>(null)
 
   const expenses = useMemo(
@@ -52,6 +54,14 @@ export function TripDetail({ trip, travellers, onBack, onEditTrip }: {
           <ArrowLeft size={18} />
         </button>
         <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{trip.name}</h2>
+        <button
+          type="button"
+          onClick={() => setShareOpen(true)}
+          aria-label="Share trip"
+          className="rounded-lg p-2 text-ink-3 hover:bg-raised hover:text-ink"
+        >
+          <Share2 size={16} />
+        </button>
         <button
           type="button"
           onClick={onEditTrip}
@@ -191,11 +201,16 @@ export function TripDetail({ trip, travellers, onBack, onEditTrip }: {
 
       <TripExpenseSheet
         open={sheetOpen}
-        trip={trip}
+        tripName={trip.name}
         travellers={travellers}
         expense={editing}
+        rates={rates}
+        onSave={(draft, id) => (id ? updateTripExpense(id, draft) : addTripExpense(trip.id, draft))}
+        onDelete={deleteTripExpense}
         onClose={() => setSheetOpen(false)}
       />
+
+      <ShareTrip open={shareOpen} trip={trip} onClose={() => setShareOpen(false)} />
     </div>
   )
 }

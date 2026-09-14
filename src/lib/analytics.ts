@@ -1,4 +1,4 @@
-import type { Category, Convertible, Expense, Traveller, TripExpense } from '../types'
+import type { Category, Convertible, Expense } from '../types'
 import type { Convert } from './convert'
 import { addMonths, monthKey } from './format'
 import { UNCATEGORISED_COLOR, slotColor } from './icons'
@@ -102,8 +102,8 @@ export interface TravellerTotal {
  * collect under an "Unassigned" row, which carries no share of its own.
  */
 export function byTraveller(
-  expenses: TripExpense[],
-  travellers: Traveller[],
+  expenses: ReadonlyArray<Convertible & { traveller_id: string | null }>,
+  travellers: ReadonlyArray<{ id: string; name: string }>,
   convert: Convert,
 ): TravellerTotal[] {
   const rows = new Map<string, TravellerTotal>()
