@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { localDelete, localGet, localPut } from './db'
 
 const BUCKET = 'avatars'
 const SIZE = 256
@@ -55,19 +56,52 @@ export async function uploadAvatar(userId: string, file: File): Promise<string> 
   return url
 }
 
-/** Signed rather than public: the bucket is private, so the URL is short-lived. */
+/**
+ * Signed rather than public: the bucket is private, so the URL is short-lived.
+ *
+ * Short-lived is also why the picture is kept on the device as well — a signed
+ * URL cannot be minted without a connection, and an avatar that vanishes the
+ * moment the signal does looks like a bug rather than a network state.
+ */
 export async function getAvatarUrl(userId: string): Promise<string | null> {
+  if (!navigator.onLine) return cachedAvatar(userId)
   const { data, error } = await supabase.storage
     .from(BUCKET)
     .createSignedUrl(pathFor(userId), SIGNED_URL_TTL)
-  if (error || !data) return null
+  if (error || !data) return cachedAvatar(userId)
   // Defeat the browser cache after a replacement, which reuses the same path.
-  return `${data.signedUrl}&v=${Date.now()}`
+  const url = `${data.signedUrl}&v=${Date.now()}`
+  void cacheAvatar(userId, url)
+  return url
 }
 
 export async function removeAvatar(userId: string): Promise<void> {
   const { error } = await supabase.storage.from(BUCKET).remove([pathFor(userId)])
   if (error) throw error
+  await localDelete('meta', `avatar:${userId}`)
+}
+
+/** Kept as a data URL: an object URL would not survive a reload, and this is ~20 KB. */
+async function cacheAvatar(userId: string, url: string): Promise<void> {
+  try {
+    const res = await fetch(url)
+    if (!res.ok) return
+    const blob = await res.blob()
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onload = () => resolve(String(reader.result))
+      reader.onerror = () => reject(reader.error)
+      reader.readAsDataURL(blob)
+    })
+    await localPut('meta', { key: `avatar:${userId}`, dataUrl })
+  } catch {
+    /* The monogram is a perfectly good fallback. */
+  }
+}
+
+async function cachedAvatar(userId: string): Promise<string | null> {
+  const row = await localGet<{ dataUrl: string }>('meta', `avatar:${userId}`)
+  return row?.dataUrl ?? null
 }
 
 /** Fallback monogram when there's no photo. */

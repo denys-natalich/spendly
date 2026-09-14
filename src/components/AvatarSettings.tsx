@@ -5,7 +5,7 @@ import { Avatar } from './Avatar'
 import { Button } from './ui'
 
 export function AvatarSettings() {
-  const { session, avatarUrl, setAvatar, clearAvatar } = useStore()
+  const { identity, avatarUrl, setAvatar, clearAvatar } = useStore()
   const fileRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -56,7 +56,7 @@ export function AvatarSettings() {
         </button>
 
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium">{session?.user.email ?? '—'}</p>
+          <p className="truncate text-sm font-medium">{identity?.email ?? '—'}</p>
           <div className="mt-1.5 flex items-center gap-3">
             <button
               type="button"

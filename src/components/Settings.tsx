@@ -10,6 +10,7 @@ import { AvatarSettings } from './AvatarSettings'
 import { ImportSettings } from './ImportSettings'
 import { LockSettings } from './LockSettings'
 import { PasswordSettings } from './PasswordSettings'
+import { SyncSettings } from './SyncStatus'
 import { Button, Card, SectionTitle, Segmented } from './ui'
 
 export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
@@ -57,6 +58,8 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
           />
         </Card>
       </section>
+
+      <SyncSettings />
 
       <PasswordSettings />
 

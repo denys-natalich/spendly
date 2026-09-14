@@ -17,9 +17,13 @@ read back in any of the three currencies from a switch on the overview.
   owes. Travel money is held in its own tables, so it never reaches the overview, the categories or
   the trend.
 - **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
-- **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, account.
+- **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, sync, account.
 
-Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password auth), `vite-plugin-pwa`.
+**Everything above works with no internet.** Expenses are written to the device first and sent to
+the server whenever there is a connection — see [Working offline](#working-offline).
+
+Stack: React 19 + Vite + Tailwind v4, Recharts, Supabase (Postgres + password auth), `vite-plugin-pwa`,
+IndexedDB for the local copy.
 
 ---
 
@@ -118,8 +122,10 @@ Supabase's redirect URLs.
 ### Installing on your phone
 
 Open the deployed URL in Safari (iOS) or Chrome (Android) and choose **Add to Home Screen**. It then
-runs full-screen with its own icon and works offline for browsing already-loaded data. A service
-worker keeps the app shell cached; new expenses still need a connection.
+runs full-screen with its own icon and works with no connection at all — reading, adding, editing
+and deleting alike. A service worker keeps the app shell cached and the data lives on the device;
+anything entered offline syncs when the network comes back. See
+[Working offline](#working-offline).
 
 > iOS only offers "Add to Home Screen" over HTTPS, so install from the deployed URL rather than
 > `localhost`. An installed web app has its own storage, separate from Safari's — so sign in once
@@ -209,6 +215,46 @@ trip does delete its expenses, and says so before it does.
 
 ---
 
+## Working offline
+
+The app is built to be used with no connection at all — a plane, a basement, a border crossing with
+data roaming off — because that is exactly where expenses get entered and exactly where they are
+most easily forgotten.
+
+**Everything is local first.** Every screen is built from a copy of your data in IndexedDB, and
+every change — a new expense, an edit, a deletion, a whole trip, even a Monefy import — is written
+there and to a queue, without waiting for a request. There is no request to fail, so nothing is lost
+when the tab is closed mid-flight and nothing has to be retried by hand. The queue is drained
+whenever there is a connection: on reconnect, on returning to the app, and on a slow timer.
+
+The header shows a quiet badge when there is something to say — `Offline · 3 to sync`, `Syncing…` —
+and nothing at all when everything is up to date. Settings → Sync has the full account and a
+**Sync now** button.
+
+What this means in practice:
+
+- **Opening the app with no connection works**, including a cold start after the phone was
+  restarted. The shell is precached by the service worker, and the account is remembered separately
+  from the Supabase session — an access token cannot be refreshed offline, and that must not look
+  like being signed out when every expense is sitting right there on the device. As soon as there is
+  a connection again the session has to prove itself: it refreshes, or you are asked for your
+  password. Your data stays either way, and syncs once you are back in.
+- **Rates are corrected afterwards.** A hryvnia expense entered offline can only be converted at
+  the nearest day already cached. The row keeps that rate so the totals read sensibly meanwhile, and
+  the real day is fetched and written onto the row the moment the network returns — before it is
+  sent, so the server never stores the guess.
+- **Signing out sends what is queued first.** If it cannot — no connection — the local copy stays on
+  the device and goes up the next time you sign in. With nothing left to send, the cache is cleared.
+
+Every queued change is an upsert of the whole row or a delete of its id, both idempotent, so a
+replay interrupted halfway and started again lands in the same place. Row ids are minted on the
+device (`crypto.randomUUID`), which is what lets an expense exist, be edited and be deleted before
+the server has ever heard of it. Two devices editing the same row while one is offline resolve
+last-writer-wins.
+
+Storage is a per-account slice of IndexedDB. It is not encrypted — no browser storage is — so on a
+shared device, turn on the app lock.
+
 ## Importing from Monefy
 
 **Settings → Import** takes a Monefy CSV export. It parses the file, shows you what it found and how
@@ -266,7 +312,11 @@ src/
   types.ts             Currency, Category, Expense, Trip, Traveller, BASE_CURRENCY
   lib/
     supabase.ts        client (falls back to a setup screen if unconfigured)
-    fx.ts              NBU fetch, rate cache, EUR conversion
+    db.ts              IndexedDB: the on-device copy of everything shown
+    sync.ts            the outbox — queued changes, replayed when there is a connection
+    identity.ts        the remembered account, so an offline start is not a sign-out
+    ids.ts             device-minted row ids
+    fx.ts              NBU fetch, rate cache (server + device), EUR conversion
     analytics.ts       month/category/trend selectors
     format.ts          money, date and month formatting
     icons.ts           category icon set + validated colour palette slots
@@ -284,6 +334,7 @@ src/
     TripDetail.tsx     one trip: total, who paid what, its expenses
     TripExpenseSheet.tsx  add / edit / delete a trip expense
     TravellerBadge.tsx a traveller's monogram in their trip colour
+    SyncStatus.tsx     the offline / queued badge, and the Sync section in Settings
     charts.tsx         monthly trend (Recharts)
     ui.tsx             Card, Button, Field, Sheet, Segmented, …
 supabase/schema.sql    tables, RLS policies

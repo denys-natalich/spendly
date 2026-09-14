@@ -10,7 +10,7 @@ export function LockSetupSheet({ open, onClose, onEnabled }: {
   onClose: () => void
   onEnabled: () => void
 }) {
-  const { session } = useStore()
+  const { identity } = useStore()
   const [available, setAvailable] = useState<boolean | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -25,7 +25,7 @@ export function LockSetupSheet({ open, onClose, onEnabled }: {
   async function turnOn() {
     setBusy(true)
     setError(null)
-    const ok = await enrollBiometric(session?.user.email ?? 'Spendly')
+    const ok = await enrollBiometric(identity?.email ?? 'Spendly')
     setBusy(false)
     markLockPromptSeen()
     if (ok) {
