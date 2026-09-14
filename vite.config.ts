@@ -29,14 +29,21 @@ export default defineConfig(({ command }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
-        // Supabase and FX APIs must always hit the network first — cached data
-        // is only a fallback for offline reads.
+        // The shell is precached in full, so the app starts with no network at
+        // all; the data it shows comes from IndexedDB, not from a cached
+        // response. Supabase is never cached — a stale reply would be read as
+        // the truth and overwrite what the device knows.
+        navigateFallback: 'index.html',
+        cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/bank\.gov\.ua\/.*/i,
             handler: 'NetworkFirst',
             options: {
               cacheName: 'fx-rates',
+              // A rate is worth waiting a few seconds for, not a minute: past
+              // that the cached copy is a better answer than a spinner.
+              networkTimeoutSeconds: 5,
               expiration: { maxEntries: 60, maxAgeSeconds: 60 * 60 * 24 * 30 },
             },
           },

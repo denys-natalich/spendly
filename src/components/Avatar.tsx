@@ -2,8 +2,8 @@ import { useStore } from '../store'
 import { initialsFor } from '../lib/avatar'
 
 export function Avatar({ size = 32, className = '' }: { size?: number; className?: string }) {
-  const { session, avatarUrl } = useStore()
-  const initials = initialsFor(session?.user.email)
+  const { identity, avatarUrl } = useStore()
+  const initials = initialsFor(identity?.email ?? undefined)
 
   return (
     <span

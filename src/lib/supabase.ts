@@ -5,12 +5,31 @@ const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY
 
 export const isConfigured = Boolean(url && anonKey)
 
+/*
+ * Every request gives up after this long.
+ *
+ * `navigator.onLine` only knows whether there is a link, not whether anything
+ * answers over it — a hotel portal, a train tunnel or a captive wifi all look
+ * online and then never reply. Without a deadline the sync would sit on a
+ * promise that never settles and stop retrying altogether. Generous enough for
+ * a paged read of several thousand rows on a slow connection.
+ */
+const REQUEST_TIMEOUT_MS = 20_000
+
+function timedFetch(input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
+  if (init.signal || typeof AbortSignal?.timeout !== 'function') return fetch(input, init)
+  return fetch(input, { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) })
+}
+
 /* When the keys are missing we still want the app to mount so it can show the
    setup instructions instead of a blank screen, hence the placeholder URL. */
 export const supabase = createClient(
   url || 'https://placeholder.supabase.co',
   anonKey || 'placeholder-anon-key',
-  { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } },
+  {
+    auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+    global: { fetch: timedFetch },
+  },
 )
 
 /** PostgREST caps every response at a server-side row limit (1000 by default), which a

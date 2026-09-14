@@ -15,6 +15,7 @@ import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
 import { Travel } from './components/Travel'
 import { Setup } from './components/Setup'
+import { SyncPill } from './components/SyncStatus'
 import { Toaster } from './components/Toaster'
 import { Card, Spinner } from './components/ui'
 import { DEFAULT_FILTER, type ExpenseFilter, type ExpensesView } from './lib/filters'
@@ -31,23 +32,26 @@ const TABS: Array<{ id: Tab; label: string; icon: typeof ChartPie }> = [
 ]
 
 export default function App() {
-  const { session, authLoading, loading, error } = useStore()
+  const { identity, authLoading, loading, error } = useStore()
   const [tab, setTab] = useState<Tab>('overview')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [filter, setFilter] = useState<ExpenseFilter>(DEFAULT_FILTER)
   const [expensesView, setExpensesView] = useState<ExpensesView>('days')
-  const lock = useAppLock(Boolean(session))
+  const lock = useAppLock(Boolean(identity))
   const [lockPrompt, setLockPrompt] = useState(false)
 
   // Offer the lock once, the first time this device has a signed-in session.
   useEffect(() => {
-    if (session && !lock.enabled && !lockPromptSeen()) setLockPrompt(true)
-  }, [session, lock.enabled])
+    if (identity && !lock.enabled && !lockPromptSeen()) setLockPrompt(true)
+  }, [identity, lock.enabled])
 
   if (!isConfigured) return <Setup />
   if (authLoading) return <div className="min-h-dvh"><Spinner label="Checking your session" /></div>
-  if (!session) return <Login />
+  // `identity` rather than the Supabase session: a cold start with no
+  // connection cannot refresh a token, and that must not look like being
+  // signed out when every expense is right there on the device.
+  if (!identity) return <Login />
   if (lock.locked) return <LockScreen onUnlock={lock.unlock} />
 
   function openNew() {
@@ -115,6 +119,7 @@ export default function App() {
         >
           <Plus size={16} /> Add expense
         </button>
+        <div className="mt-4 flex px-1"><SyncPill /></div>
       </aside>
 
       <div className="min-w-0 flex-1">
@@ -122,14 +127,17 @@ export default function App() {
         <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-line
                            bg-bg/85 px-5 py-3 backdrop-blur md:hidden">
           <h1 className="text-base font-semibold">{current.label}</h1>
-          <button
-            type="button"
-            onClick={() => setTab('settings')}
-            aria-label="Account settings"
-            className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            <Avatar size={32} />
-          </button>
+          <div className="ml-auto flex items-center gap-3">
+            <SyncPill />
+            <button
+              type="button"
+              onClick={() => setTab('settings')}
+              aria-label="Account settings"
+              className="rounded-full focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              <Avatar size={32} />
+            </button>
+          </div>
         </header>
 
         <main className="mx-auto w-full max-w-2xl px-4 pt-4 pb-28 md:px-8 md:pt-8 md:pb-12 lg:max-w-4xl">

@@ -1,4 +1,5 @@
 import { fetchAllPages, supabase } from './supabase'
+import { localAll, localPut, localPutMany } from './db'
 import type { Currency, DayRates } from '../types'
 import { toISODate } from './format'
 
@@ -11,7 +12,9 @@ import { toISODate } from './format'
  * the EUR base is derived: usd_per_eur = uah_per_eur / uah_per_usd.
  *
  * Every day the app touches gets written to the shared `fx_rates` table, so a
- * date is fetched from the network at most once ever, by whoever needs it first.
+ * date is fetched from the network at most once ever, by whoever needs it first,
+ * and mirrored into the device's own cache so conversion keeps working with no
+ * connection at all.
  */
 
 const NBU = 'https://bank.gov.ua/NBUStatService/v1/statdirectory/exchange'
@@ -42,6 +45,13 @@ async function fetchFromFallback(isoDate: string): Promise<DayRates | null> {
   return { day: isoDate, usd, uah }
 }
 
+/** The rates already on this device — the only source when there is no network. */
+export async function loadLocalRates(): Promise<DayRates[]> {
+  const rows = await localAll<DayRates>('fx_rates')
+  return rows.map((r) => ({ day: r.day, usd: Number(r.usd), uah: Number(r.uah) }))
+}
+
+/** Pulls the shared cache and mirrors it locally. Needs a connection. */
 export async function loadCachedRates(): Promise<DayRates[]> {
   // Every day an expense might fall on has to be here: a rate missing from this
   // map sends conversion to the nearest day it does have, which for a 2021
@@ -49,7 +59,9 @@ export async function loadCachedRates(): Promise<DayRates[]> {
   const rows = await fetchAllPages<{ day: string; usd: string; uah: string }>((from, to) =>
     supabase.from('fx_rates').select('day, usd, uah').order('day', { ascending: false }).range(from, to),
   )
-  return rows.map((r) => ({ day: r.day, usd: Number(r.usd), uah: Number(r.uah) }))
+  const rates = rows.map((r) => ({ day: r.day, usd: Number(r.usd), uah: Number(r.uah) }))
+  await localPutMany('fx_rates', rates)
+  return rates
 }
 
 /**
@@ -80,6 +92,7 @@ export async function ensureRatesFor(isoDate: string, known: Map<string, DayRate
     () => undefined,
     () => undefined,
   )
+  await localPut('fx_rates', fetched)
   known.set(fetched.day, fetched)
   return fetched
 }
@@ -152,6 +165,7 @@ export async function backfillRates(
     const chunk = fresh.slice(i, i + 500)
     await supabase.from('fx_rates').upsert(chunk, { onConflict: 'day', ignoreDuplicates: true })
   }
+  await localPutMany('fx_rates', fresh)
   for (const r of fresh) known.set(r.day, r)
   return fresh.length
 }
