@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react'
 import { supabase } from './supabase'
 import { localAll, localDelete, localGet, localPut, localPutMany } from './db'
 import { backfillRates, loadLocalRates, rateToEur, nearestKnown } from './fx'
+import { deleteSharedExpense, saveSharedExpense } from './share'
 import type { Currency, DayRates } from '../types'
 
 /*
@@ -30,7 +31,15 @@ export type SyncTable = 'categories' | 'expenses' | 'trips' | 'travellers' | 'tr
 export interface OutboxEntry {
   /** Assigned by IndexedDB; the replay order. */
   seq?: number
-  user_id: string
+  /** The account this change belongs to. Absent on a change made through a link. */
+  user_id?: string
+  /**
+   * Set when a share link's holder made the change. They have no account and
+   * no session, so it goes up through the database functions the link allows
+   * rather than through the table — but it waits in the same queue, and works
+   * offline for exactly the same reasons.
+   */
+  share_token?: string
   table: SyncTable
   op: 'upsert' | 'delete'
   row_id: string
@@ -178,14 +187,33 @@ export async function queueUpsert(
   row: SyncRow,
   opts: { ratePending?: boolean } = {},
 ): Promise<void> {
-  const existing = (await outbox()).find((e) => e.table === table && e.row_id === row.id)
+  await enqueueUpsert(table, row.id, toRemote(table, row), { user_id: row.user_id }, opts)
+}
+
+/** The same, for a link holder: the trip, not an account, says where it goes. */
+export async function queueShareUpsert(
+  shareToken: string,
+  row: { id: string } & Record<string, unknown>,
+  opts: { ratePending?: boolean } = {},
+): Promise<void> {
+  await enqueueUpsert('trip_expenses', row.id, toRemote('trip_expenses', row as unknown as SyncRow), { share_token: shareToken }, opts)
+}
+
+async function enqueueUpsert(
+  table: SyncTable,
+  rowId: string,
+  payload: Record<string, unknown>,
+  owner: { user_id?: string; share_token?: string },
+  opts: { ratePending?: boolean },
+): Promise<void> {
+  const existing = (await outbox()).find((e) => e.table === table && e.row_id === rowId)
   const entry: OutboxEntry = {
     ...(existing?.seq !== undefined ? { seq: existing.seq } : {}),
-    user_id: row.user_id,
+    ...owner,
     table,
     op: 'upsert',
-    row_id: row.id,
-    payload: toRemote(table, row),
+    row_id: rowId,
+    payload,
     rate_pending: opts.ratePending ?? false,
     queued_at: new Date().toISOString(),
     attempts: 0,
@@ -233,11 +261,23 @@ export async function queueUpsertMany(
  * spares us having to know whether an earlier replay got the insert through.
  */
 export async function queueDelete(table: SyncTable, userId: string, rowId: string): Promise<void> {
+  await enqueueDelete(table, rowId, { user_id: userId })
+}
+
+export async function queueShareDelete(shareToken: string, rowId: string): Promise<void> {
+  await enqueueDelete('trip_expenses', rowId, { share_token: shareToken })
+}
+
+async function enqueueDelete(
+  table: SyncTable,
+  rowId: string,
+  owner: { user_id?: string; share_token?: string },
+): Promise<void> {
   for (const entry of await outbox()) {
     if (entry.table === table && entry.row_id === rowId) await localDelete('outbox', entry.seq!)
   }
   await localPut('outbox', {
-    user_id: userId,
+    ...owner,
     table,
     op: 'delete',
     row_id: rowId,
@@ -282,7 +322,23 @@ export async function applyPending<T extends { id: string }>(
   rows: T[],
   hydrate: (payload: Record<string, unknown>) => T,
 ): Promise<T[]> {
-  const entries = (await outbox()).filter((e) => e.table === table && e.user_id === userId)
+  return replay(rows, (await outbox()).filter((e) => e.table === table && e.user_id === userId), hydrate)
+}
+
+/** The same, over a trip snapshot fetched through a share link. */
+export async function applyPendingShare<T extends { id: string }>(
+  shareToken: string,
+  rows: T[],
+  hydrate: (payload: Record<string, unknown>) => T,
+): Promise<T[]> {
+  return replay(rows, (await outbox()).filter((e) => e.share_token === shareToken), hydrate)
+}
+
+function replay<T extends { id: string }>(
+  rows: T[],
+  entries: OutboxEntry[],
+  hydrate: (payload: Record<string, unknown>) => T,
+): T[] {
   if (entries.length === 0) return rows
   const byId = new Map(rows.map((row) => [row.id, row]))
   for (const entry of entries) {
@@ -320,19 +376,22 @@ async function runFlush(): Promise<void> {
     return
   }
 
-  let userId: string
+  let userId: string | null = null
   try {
     const { data } = await supabase.auth.getSession()
-    if (!data.session) return // Signed out, or the token cannot be refreshed yet.
-    userId = data.session.user.id
+    // No session means signed out, or a token that cannot be refreshed yet —
+    // which stops the account's own changes, but not a link holder's: their
+    // token is the credential, and they never had a session to lose.
+    userId = data.session?.user.id ?? null
   } catch {
     setState({ online: false })
     return
   }
 
-  const queue = (await outbox()).filter((e) => e.user_id === userId)
+  const all = await outbox()
+  const queue = all.filter((e) => (e.share_token ? true : userId !== null && e.user_id === userId))
   if (queue.length === 0) {
-    setState({ online: true, pending: (await outbox()).length })
+    setState({ online: true, pending: all.length })
     return
   }
 
@@ -343,6 +402,13 @@ async function runFlush(): Promise<void> {
     let i = 0
     while (i < queue.length) {
       const entry = queue[i]
+
+      if (entry.share_token) {
+        if ((await pushShared(entry)) === 'offline') return void setState({ online: false })
+        i++
+        await refreshPending()
+        continue
+      }
 
       if (entry.op === 'delete') {
         const { error } = await supabase.from(entry.table).delete().eq('id', entry.row_id)
@@ -362,7 +428,8 @@ async function runFlush(): Promise<void> {
       while (
         batch.length < BATCH &&
         queue[i + batch.length]?.op === 'upsert' &&
-        queue[i + batch.length]?.table === entry.table
+        queue[i + batch.length]?.table === entry.table &&
+        !queue[i + batch.length]?.share_token
       ) {
         batch.push(queue[i + batch.length])
       }
@@ -401,6 +468,31 @@ async function runFlush(): Promise<void> {
   }
 }
 
+/**
+ * One change made through a share link.
+ *
+ * A rate the sender could not resolve is left out of the payload rather than
+ * sent as a guess: the database can read the rate table and a link holder
+ * cannot, so it fills in the day's own rate as it writes the row.
+ */
+async function pushShared(entry: OutboxEntry): Promise<'done' | 'offline' | 'kept'> {
+  try {
+    if (entry.op === 'delete') {
+      await deleteSharedExpense(entry.share_token!, entry.row_id)
+    } else {
+      const payload = { ...entry.payload }
+      if (entry.rate_pending) delete payload.rate_to_eur
+      await saveSharedExpense(entry.share_token!, payload)
+    }
+    await localDelete('outbox', entry.seq!)
+    return 'done'
+  } catch (e) {
+    if (isOffline(e)) return 'offline'
+    await penalise(entry, e instanceof Error ? e.message : 'That change was refused.')
+    return 'kept'
+  }
+}
+
 /** Returns true when the entry was dropped for good. */
 async function penalise(entry: OutboxEntry, message: string): Promise<boolean> {
   const attempts = entry.attempts + 1
@@ -423,7 +515,7 @@ async function penalise(entry: OutboxEntry, message: string): Promise<boolean> {
  * the server never stores the guess.
  */
 async function resolvePendingRates(queue: OutboxEntry[]): Promise<void> {
-  const waiting = queue.filter((e) => e.rate_pending && e.payload)
+  const waiting = queue.filter((e) => e.rate_pending && e.payload && !e.share_token)
   if (waiting.length === 0) return
 
   const known = new Map((await loadLocalRates()).map((r) => [r.day, r]))
