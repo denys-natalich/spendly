@@ -16,7 +16,7 @@
  */
 
 const DB_NAME = 'spendly'
-const DB_VERSION = 2
+const DB_VERSION = 3
 
 export type LocalStore =
   | 'categories'
@@ -24,6 +24,8 @@ export type LocalStore =
   | 'trips'
   | 'travellers'
   | 'trip_expenses'
+  | 'debts'
+  | 'debt_installments'
   | 'fx_rates'
   | 'shared_trips'
   | 'outbox'
@@ -35,6 +37,8 @@ const SCHEMA: Record<LocalStore, IDBObjectStoreParameters> = {
   trips: { keyPath: 'id' },
   travellers: { keyPath: 'id' },
   trip_expenses: { keyPath: 'id' },
+  debts: { keyPath: 'id' },
+  debt_installments: { keyPath: 'id' },
   fx_rates: { keyPath: 'day' },
   // One record per share link opened on this device: the whole trip as it was
   // last seen. Kept apart from the account's own stores above — a link holder
@@ -47,7 +51,7 @@ const SCHEMA: Record<LocalStore, IDBObjectStoreParameters> = {
 }
 
 /** The stores that hold rows belonging to one signed-in user. */
-export const USER_STORES = ['categories', 'expenses', 'trips', 'travellers', 'trip_expenses'] as const
+export const USER_STORES = ['categories', 'expenses', 'trips', 'travellers', 'trip_expenses', 'debts', 'debt_installments'] as const
 
 let opening: Promise<IDBDatabase | null> | null = null
 

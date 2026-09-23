@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChartPie, ListPlus, Plane, Plus, Settings as SettingsIcon, Tag, Wallet } from 'lucide-react'
+import { ChartPie, HandCoins, ListPlus, Plane, Plus, Settings as SettingsIcon, Tag, Wallet } from 'lucide-react'
 import { isConfigured } from './lib/supabase'
 import { useAppLock } from './lib/useAppLock'
 import { lockPromptSeen, markLockPromptSeen } from './lib/lock'
@@ -14,6 +14,7 @@ import { Login } from './components/Login'
 import { Overview } from './components/Overview'
 import { Settings } from './components/Settings'
 import { Travel } from './components/Travel'
+import { Debts } from './components/Debts'
 import { Setup } from './components/Setup'
 import { SyncPill } from './components/SyncStatus'
 import { Toaster } from './components/Toaster'
@@ -21,14 +22,18 @@ import { Card, Spinner } from './components/ui'
 import { DEFAULT_FILTER, type ExpenseFilter, type ExpensesView } from './lib/filters'
 import type { Expense } from './types'
 
-type Tab = 'overview' | 'expenses' | 'travel' | 'categories' | 'settings'
+type Tab = 'overview' | 'expenses' | 'travel' | 'debts' | 'categories' | 'settings'
 
-const TABS: Array<{ id: Tab; label: string; icon: typeof ChartPie }> = [
-  { id: 'overview', label: 'Overview', icon: ChartPie },
-  { id: 'expenses', label: 'Expenses', icon: ListPlus },
-  { id: 'travel', label: 'Travel', icon: Plane },
-  { id: 'categories', label: 'Categories', icon: Tag },
-  { id: 'settings', label: 'Settings', icon: SettingsIcon },
+// Overview sits in the middle of the tab bar — it's the home screen the app opens on.
+// Settings is left off the phone's bar (the avatar in the header opens it) so
+// the bar keeps an odd count and Overview stays centred.
+const TABS: Array<{ id: Tab; label: string; icon: typeof ChartPie; inTabBar: boolean }> = [
+  { id: 'expenses', label: 'Expenses', icon: ListPlus, inTabBar: true },
+  { id: 'travel', label: 'Travel', icon: Plane, inTabBar: true },
+  { id: 'overview', label: 'Overview', icon: ChartPie, inTabBar: true },
+  { id: 'debts', label: 'Debts', icon: HandCoins, inTabBar: true },
+  { id: 'categories', label: 'Categories', icon: Tag, inTabBar: true },
+  { id: 'settings', label: 'Settings', icon: SettingsIcon, inTabBar: false },
 ]
 
 export default function App() {
@@ -160,6 +165,7 @@ export default function App() {
                 />
               )}
               {tab === 'travel' && <Travel />}
+              {tab === 'debts' && <Debts />}
               {tab === 'categories' && <Categories />}
               {tab === 'settings' && (
                 <Settings
@@ -194,7 +200,7 @@ export default function App() {
         className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95
                    pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
-        {TABS.map(({ id, label, icon: Icon }) => (
+        {TABS.filter((t) => t.inTabBar).map(({ id, label, icon: Icon }) => (
           <button
             key={id}
             type="button"

@@ -86,6 +86,46 @@ export interface TripExpenseDraft {
   note: string | null
 }
 
+/*
+ * Debts. A debt is a name and the amount owed; each instalment recorded
+ * against it is a payment that brings what is left down. Kept in its own
+ * tables like travel: repaying a loan is not a spending category, and must not
+ * move the monthly total.
+ */
+export interface Debt {
+  id: string
+  user_id: string
+  name: string
+  /** The total owed, in `currency`. */
+  amount: number
+  /** Every instalment is in this currency — a loan is repaid in what it was taken in. */
+  currency: Currency
+  created_at: string
+}
+
+export interface DebtDraft {
+  name: string
+  amount: number
+  currency: Currency
+}
+
+/** One payment towards a debt. */
+export interface DebtInstallment {
+  id: string
+  user_id: string
+  debt_id: string
+  amount: number
+  description: string | null
+  paid_on: string // YYYY-MM-DD
+  created_at: string
+}
+
+export interface DebtInstallmentDraft {
+  amount: number
+  description: string | null
+  paid_on: string
+}
+
 /** Units of each currency per 1 EUR on a given day. EUR is always 1. */
 export interface DayRates {
   day: string
