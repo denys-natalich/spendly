@@ -1,7 +1,7 @@
 -- ---------------------------------------------------------------------------
 -- Shareable trips.
 --
--- A link holder is not a Spendly user and never becomes one. Everything they
+-- A link holder is not a Moneta user and never becomes one. Everything they
 -- can do goes through the four functions below, which run as the trip's owner
 -- (`security definer`) and take the link's token as their only credential.
 -- That is why row level security is never relaxed here: the `anon` role still

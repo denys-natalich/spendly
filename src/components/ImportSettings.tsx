@@ -118,7 +118,7 @@ export function ImportSettings() {
                     skipped.unsupportedCurrency.length > 0 &&
                       `everything in ${skipped.unsupportedCurrency.join(', ')}`,
                   ].filter(Boolean).join(', ')}
-                  . Spendly tracks expenses in EUR, USD and UAH only.
+                  . Moneta tracks expenses in EUR, USD and UAH only.
                 </span>
               </p>
             )}

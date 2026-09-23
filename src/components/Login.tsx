@@ -32,7 +32,7 @@ export function Login() {
             <Wallet size={22} />
           </span>
           <div>
-            <h1 className="text-xl font-semibold">Spendly</h1>
+            <h1 className="text-xl font-semibold">Moneta</h1>
             <p className="mt-1 text-sm text-ink-2">
               Track spending in €, $ and ₴ — everything reported in euro.
             </p>

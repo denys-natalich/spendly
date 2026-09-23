@@ -97,7 +97,7 @@ export function Settings({ lockEnabled, onEnableLock, onDisableLock }: {
 
       {/* Last line on the screen: what the phone is actually running, so a
           stale service worker is visible rather than guessed at. */}
-      <p className="pb-1 text-center text-xs text-ink-3">Spendly {VERSION_LABEL}</p>
+      <p className="pb-1 text-center text-xs text-ink-3">Moneta {VERSION_LABEL}</p>
     </div>
   )
 }

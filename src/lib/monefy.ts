@@ -95,7 +95,7 @@ export function parseMonefy(text: string): ParseResult {
 }
 
 /**
- * Monefy names that mean the same thing as a Spendly starter category. Anything
+ * Monefy names that mean the same thing as a Moneta starter category. Anything
  * not listed here keeps its own name and is created on import.
  */
 export const CATEGORY_ALIASES: Record<string, string> = {

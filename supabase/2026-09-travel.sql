@@ -19,7 +19,7 @@ create table if not exists public.trips (
 create index if not exists trips_user_idx on public.trips (user_id, created_at desc);
 
 -- Travellers are names, not accounts: the people on the trip do not need to
--- have Spendly, and the trip belongs to whoever recorded it.
+-- have Moneta, and the trip belongs to whoever recorded it.
 create table if not exists public.travellers (
   id         uuid primary key default gen_random_uuid(),
   trip_id    uuid not null references public.trips (id) on delete cascade,
