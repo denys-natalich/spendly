@@ -16,12 +16,13 @@ import { getAvatarUrl, removeAvatar, uploadAvatar } from './lib/avatar'
 import { newId } from './lib/ids'
 import { NEW_CATEGORY_ICONS, targetCategoryName, type MonefyRow } from './lib/monefy'
 import { useTravel, type TravelStore } from './lib/useTravel'
+import { useDebts, type DebtStore } from './lib/useDebts'
 import { today } from './lib/format'
 import { assignColorSlot, recolourCollisions } from './lib/icons'
 import { BASE_CURRENCY, CURRENCIES } from './types'
 import type { Category, Currency, DayRates, Expense, ExpenseDraft } from './types'
 
-interface Store extends TravelStore {
+interface Store extends TravelStore, DebtStore {
   session: Session | null
   /** Who the app is for. Survives a cold start with no connection. */
   identity: Identity | null
@@ -334,6 +335,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // Trips keep their own state and their own tables; the rate cache is the one
   // thing they borrow, so travel spending converts like everything else.
   const travel = useTravel(userId, Boolean(session), resolveRate)
+  const debt = useDebts(userId, Boolean(session))
 
   const addExpense = useCallback(async (draft: ExpenseDraft) => {
     if (!userId) return
@@ -599,6 +601,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     signIn, setPassword, signOut, addExpense, updateExpense, deleteExpense,
     addCategory, updateCategory, deleteCategory, importExpenses,
     ...travel,
+    ...debt,
   }
 
   return <StoreContext.Provider value={value}>{children}</StoreContext.Provider>

@@ -39,8 +39,8 @@ IndexedDB for the local copy.
 ### 2. Create the tables
 
 Open **SQL Editor → New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql),
-and run it. It creates seven tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
-`trip_expenses`, `trip_shares` for the Travel section), turns on row level security, adds policies so
+and run it. It creates nine tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
+`trip_expenses`, `trip_shares` for the Travel section, `debts`, `debt_installments` for Debts), turns on row level security, adds policies so
 you can only ever read and write your own rows, and defines the four functions a shared trip's link
 holder goes through.
 
@@ -50,6 +50,7 @@ Safe to re-run — every statement is guarded. **Upgrading an existing project:*
 | --- | --- |
 | the Travel section | [`supabase/2026-09-travel.sql`](supabase/2026-09-travel.sql) |
 | shared trips | [`supabase/2026-09-trip-sharing.sql`](supabase/2026-09-trip-sharing.sql) |
+| the Debts section | [`supabase/2026-09-debts.sql`](supabase/2026-09-debts.sql) |
 
 Each adds only what is new and touches nothing that already holds data.
 
@@ -369,12 +370,14 @@ src/
     avatar.ts          crop/scale, private-bucket upload, signed URL
     convert.ts         restates expenses in the display currency
     useTravel.ts       trips, travellers and trip expenses — their own store
+    useDebts.ts        debts and the instalments paid against them — their own store
     useAppLock.ts      locks on leaving the foreground
   components/
     Overview.tsx  Expenses.tsx  Categories.tsx  Settings.tsx
     Login.tsx  LockScreen.tsx  LockSettings.tsx  PasswordSettings.tsx
     ExpenseSheet.tsx   add / edit / delete an expense
     Travel.tsx         trip list + the create / edit trip sheet
+    Debts.tsx          debts with what is left, recorded instalments, and their sheets
     TripDetail.tsx     one trip: total, who paid what, its expenses
     TripExpenseSheet.tsx  add / edit / delete a trip expense, for owner and guest alike
     ShareTrip.tsx      the owner's side of a link: make it, copy it, switch it off
@@ -387,6 +390,7 @@ supabase/schema.sql    tables, RLS policies
 supabase/avatars.sql   private avatar bucket + storage policies
 supabase/2026-09-travel.sql  travel tables, for a project created before them
 supabase/2026-09-trip-sharing.sql  share links + the functions a link holder calls
+supabase/2026-09-debts.sql   debt tables, for a project created before them
 ```
 
 ### Chart colours
