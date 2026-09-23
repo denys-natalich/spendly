@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { HandCoins, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronRight, HandCoins, Inbox, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { dayLabel, money, symbolOf, today } from '../lib/format'
 import { toast } from '../lib/toast'
 import { BASE_CURRENCY, CURRENCIES, type Currency, type Debt, type DebtInstallment } from '../types'
-import { Button, Card, EmptyState, Field, Segmented, Sheet, Spinner, inputClass } from './ui'
+import { Button, Card, EmptyState, Field, SectionTitle, Segmented, Sheet, Spinner, inputClass } from './ui'
 
-/* Stable empty list, so a card with no payments doesn't get a new array every render. */
+/* Stable empty list, so a debt with no payments doesn't get a new array every render. */
 const NO_INSTALLMENTS: DebtInstallment[] = []
 
 function parseAmount(raw: string): number {
@@ -17,13 +17,18 @@ function sumOf(rows: DebtInstallment[]): number {
   return rows.reduce((sum, r) => sum + r.amount, 0)
 }
 
+/** Paid, left and the repaid share of one debt — the numbers every view of it shows. */
+function standing(debt: Debt, rows: DebtInstallment[]) {
+  const paid = sumOf(rows)
+  const left = debt.amount - paid
+  return { paid, left, settled: left < 0.005, share: Math.min(1, paid / debt.amount) }
+}
+
 export function Debts() {
   const { debts, installments, debtsLoading, debtsError } = useStore()
+  const [openId, setOpenId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
-  // Which debt the instalment sheet is for, and the row being edited, if any.
-  const [payingDebt, setPayingDebt] = useState<Debt | null>(null)
-  const [editingRow, setEditingRow] = useState<DebtInstallment | null>(null)
 
   const byDebt = useMemo(() => {
     const map = new Map<string, DebtInstallment[]>()
@@ -35,13 +40,21 @@ export function Debts() {
     return map
   }, [installments])
 
-  const payingRows = (payingDebt && byDebt.get(payingDebt.id)) || NO_INSTALLMENTS
+  // Gone once deleted, which drops back to the list on its own.
+  const open = debts.find((d) => d.id === openId) ?? null
 
   return (
     <>
       {debtsError && <Card className="mb-4 border-danger/40 p-4 text-sm text-danger">{debtsError}</Card>}
 
-      {debtsLoading ? (
+      {open ? (
+        <DebtDetail
+          debt={open}
+          rows={byDebt.get(open.id) ?? NO_INSTALLMENTS}
+          onBack={() => setOpenId(null)}
+          onEdit={() => setEditingDebt(open)}
+        />
+      ) : debtsLoading ? (
         <Spinner label="Loading your debts" />
       ) : (
         <div className="space-y-4">
@@ -67,16 +80,37 @@ export function Debts() {
               />
             </Card>
           ) : (
-            debts.map((d) => (
-              <DebtCard
-                key={d.id}
-                debt={d}
-                rows={byDebt.get(d.id) ?? NO_INSTALLMENTS}
-                onEdit={() => setEditingDebt(d)}
-                onPay={() => { setEditingRow(null); setPayingDebt(d) }}
-                onEditRow={(row) => { setEditingRow(row); setPayingDebt(d) }}
-              />
-            ))
+            <Card className="divide-y divide-line overflow-hidden">
+              {debts.map((d) => {
+                const rows = byDebt.get(d.id) ?? NO_INSTALLMENTS
+                const { left, settled, share } = standing(d, rows)
+                return (
+                  <button
+                    key={d.id}
+                    type="button"
+                    onClick={() => setOpenId(d.id)}
+                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-raised"
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-baseline justify-between gap-3">
+                        <span className="truncate text-sm font-medium">{d.name}</span>
+                        <span className="tnum shrink-0 text-sm font-semibold">
+                          {settled ? 'Paid off' : money(left, d.currency)}
+                        </span>
+                      </span>
+                      <span className="mt-1.5 block h-1 overflow-hidden rounded-full bg-raised" aria-hidden>
+                        <span className="block h-full rounded-full bg-accent" style={{ width: `${share * 100}%` }} />
+                      </span>
+                      <span className="tnum mt-1 block text-xs text-ink-3">
+                        {rows.length} {rows.length === 1 ? 'instalment' : 'instalments'} · of{' '}
+                        {money(d.amount, d.currency)}
+                      </span>
+                    </span>
+                    <ChevronRight size={14} className="shrink-0 text-ink-3" />
+                  </button>
+                )
+              })}
+            </Card>
           )}
         </div>
       )}
@@ -86,40 +120,56 @@ export function Debts() {
         debt={editingDebt}
         paid={editingDebt ? sumOf(byDebt.get(editingDebt.id) ?? NO_INSTALLMENTS) : 0}
         onClose={() => { setCreating(false); setEditingDebt(null) }}
-      />
-
-      <InstallmentSheet
-        debt={payingDebt}
-        row={editingRow}
-        // What is left before this payment — excluding the row being edited.
-        remaining={payingDebt ? payingDebt.amount - sumOf(payingRows) + (editingRow?.amount ?? 0) : 0}
-        onClose={() => { setPayingDebt(null); setEditingRow(null) }}
+        onCreated={(id) => setOpenId(id)}
       />
     </>
   )
 }
 
-function DebtCard({ debt, rows, onEdit, onPay, onEditRow }: {
+/** One debt: what is left, and every instalment recorded against it. */
+function DebtDetail({ debt, rows, onBack, onEdit }: {
   debt: Debt
   rows: DebtInstallment[]
+  onBack: () => void
   onEdit: () => void
-  onPay: () => void
-  onEditRow: (row: DebtInstallment) => void
 }) {
-  const paid = sumOf(rows)
-  const left = debt.amount - paid
-  const settled = left < 0.005
-  const share = Math.min(1, paid / debt.amount)
+  const [paying, setPaying] = useState(false)
+  const [editingRow, setEditingRow] = useState<DebtInstallment | null>(null)
+  const { paid, left, settled, share } = standing(debt, rows)
+
+  function openNew() {
+    setEditingRow(null)
+    setPaying(true)
+  }
 
   return (
-    <Card className="overflow-hidden">
-      <div className="flex items-start gap-3 px-4 pt-4">
-        <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold">{debt.name}</h3>
-          <div className="tnum mt-1 text-2xl font-semibold tracking-tight">
+    <div className="space-y-5">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          aria-label="All debts"
+          className="rounded-lg p-2 text-ink-3 hover:bg-raised hover:text-ink"
+        >
+          <ArrowLeft size={18} />
+        </button>
+        <h2 className="min-w-0 flex-1 truncate text-base font-semibold">{debt.name}</h2>
+        <button
+          type="button"
+          onClick={onEdit}
+          aria-label="Edit debt"
+          className="rounded-lg p-2 text-ink-3 hover:bg-raised hover:text-ink"
+        >
+          <Pencil size={16} />
+        </button>
+      </div>
+
+      <Card className="p-5">
+        <div className="text-center">
+          <div className="tnum text-4xl font-semibold tracking-tight">
             {settled ? 'Paid off' : money(left, debt.currency)}
           </div>
-          <p className="tnum mt-0.5 text-xs text-ink-3">
+          <p className="tnum mt-1.5 text-sm text-ink-3">
             {settled
               ? left < -0.005
                 ? `Overpaid by ${money(-left, debt.currency)} · ${money(debt.amount, debt.currency)} owed`
@@ -127,59 +177,63 @@ function DebtCard({ debt, rows, onEdit, onPay, onEditRow }: {
               : `left of ${money(debt.amount, debt.currency)} · ${money(paid, debt.currency)} paid`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onEdit}
-          aria-label={`Edit ${debt.name}`}
-          className="-mt-1 -mr-1 rounded-lg p-2 text-ink-3 hover:bg-raised hover:text-ink"
+        <div
+          className="mt-4 h-1.5 overflow-hidden rounded-full bg-raised"
+          role="progressbar"
+          aria-label={`${debt.name} repaid`}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(share * 100)}
         >
-          <Pencil size={15} />
-        </button>
-      </div>
-
-      <div
-        className="mx-4 mt-3 h-1.5 overflow-hidden rounded-full bg-raised"
-        role="progressbar"
-        aria-label={`${debt.name} repaid`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(share * 100)}
-      >
-        <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${share * 100}%` }} />
-      </div>
-
-      {!settled && (
-        <div className="px-4 pt-3">
-          <Button variant="subtle" className="w-full" onClick={onPay}>
+          <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${share * 100}%` }} />
+        </div>
+        {!settled && (
+          <Button className="mt-4 w-full" onClick={openNew}>
             <Plus size={16} /> Record instalment
           </Button>
-        </div>
-      )}
+        )}
+      </Card>
 
-      {rows.length > 0 ? (
-        <ul className="mt-3 divide-y divide-line border-t border-line">
-          {rows.map((r) => (
-            <li key={r.id}>
+      <section>
+        <SectionTitle>Instalments</SectionTitle>
+        {rows.length === 0 ? (
+          <Card>
+            <EmptyState
+              icon={<Inbox size={32} />}
+              title="No instalments yet"
+              body="Record each payment as you make it. Every one is taken off what is left."
+            />
+          </Card>
+        ) : (
+          <Card className="divide-y divide-line overflow-hidden">
+            {rows.map((r) => (
               <button
+                key={r.id}
                 type="button"
-                onClick={() => onEditRow(r)}
-                className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-raised"
+                onClick={() => { setEditingRow(r); setPaying(true) }}
+                className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-raised"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm">{r.description || 'Instalment'}</span>
+                  <span className="block truncate text-sm font-medium">{r.description || 'Instalment'}</span>
                   <span className="block text-xs text-ink-3">{dayLabel(r.paid_on)}</span>
                 </span>
                 <span className="tnum shrink-0 text-sm font-semibold text-good">
                   −{money(r.amount, debt.currency)}
                 </span>
               </button>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="px-4 pt-2.5 pb-4 text-center text-xs text-ink-3">No instalments recorded yet.</p>
-      )}
-    </Card>
+            ))}
+          </Card>
+        )}
+      </section>
+
+      <InstallmentSheet
+        debt={paying ? debt : null}
+        row={editingRow}
+        // What is left before this payment — excluding the row being edited.
+        remaining={left + (editingRow?.amount ?? 0)}
+        onClose={() => { setPaying(false); setEditingRow(null) }}
+      />
+    </div>
   )
 }
 
@@ -209,12 +263,13 @@ function AmountInput({ value, onChange, currency, autoFocus, label }: {
 }
 
 /** Create or edit a debt: its name, how much is owed, and in what currency. */
-function DebtSheet({ open, debt, paid, onClose }: {
+function DebtSheet({ open, debt, paid, onClose, onCreated }: {
   open: boolean
   debt: Debt | null
   /** Already recorded against this debt, to explain what a lower total means. */
   paid: number
   onClose: () => void
+  onCreated: (id: string) => void
 }) {
   const { createDebt, updateDebt, deleteDebt } = useStore()
   const [name, setName] = useState('')
@@ -245,7 +300,7 @@ function DebtSheet({ open, debt, paid, onClose }: {
     const draft = { name: trimmedName, amount: Number(parsed.toFixed(2)), currency }
     try {
       if (debt) await updateDebt(debt.id, draft)
-      else await createDebt(draft)
+      else onCreated((await createDebt(draft)).id)
       toast(debt ? 'Debt updated' : 'Debt added')
       onClose()
     } catch (e) {

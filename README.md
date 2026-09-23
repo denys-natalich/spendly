@@ -1,6 +1,6 @@
-# Spendly
+# Moneta
 
-A multi-currency expense tracker, installable as a PWA. Log spending in **EUR, USD or UAH**;
+A multi-currency money management app — expenses, trips and debts — installable as a PWA. Log spending in **EUR, USD or UAH**;
 totals are held in **euro** using the official rate from the day the expense happened, and can be
 read back in any of the three currencies from a switch on the overview.
 
@@ -17,6 +17,8 @@ read back in any of the three currencies from a switch on the overview.
   owes. Travel money is held in its own tables, so it never reaches the overview, the categories or
   the trend. A trip can be **shared by link**, so the rest of the group can add what they spent
   without an account of their own.
+- **Debts** — a named amount owed, and the instalments recorded against it; each one brings what is
+  left down. Held in its own tables, so repayments never reach your expense totals.
 - **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, sync, account.
 

@@ -25,7 +25,7 @@ export function LockSetupSheet({ open, onClose, onEnabled }: {
   async function turnOn() {
     setBusy(true)
     setError(null)
-    const ok = await enrollBiometric(identity?.email ?? 'Spendly')
+    const ok = await enrollBiometric(identity?.email ?? 'Moneta')
     setBusy(false)
     markLockPromptSeen()
     if (ok) {
@@ -51,7 +51,7 @@ export function LockSetupSheet({ open, onClose, onEnabled }: {
         ) : (
           <>
             <p className="text-sm text-ink-2">
-              Require Face ID whenever you come back to Spendly, so your finances aren't readable by
+              Require Face ID whenever you come back to Moneta, so your finances aren't readable by
               anyone holding your unlocked phone.
             </p>
             {error && <p className="text-sm text-danger">{error}</p>}

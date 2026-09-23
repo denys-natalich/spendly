@@ -30,7 +30,7 @@ export function LockScreen({ onUnlock }: { onUnlock: () => void }) {
         <span className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-raised text-ink-2">
           <Lock size={22} />
         </span>
-        <h1 className="text-lg font-semibold">Spendly is locked</h1>
+        <h1 className="text-lg font-semibold">Moneta is locked</h1>
         <p className="mt-1 mb-6 text-sm text-ink-2">Unlock to see your expenses.</p>
 
         <Button onClick={tryUnlock} busy={busy} className="w-full">

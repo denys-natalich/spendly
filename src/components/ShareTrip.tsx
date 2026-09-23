@@ -127,7 +127,7 @@ export function ShareTrip({ open, trip, onClose }: {
           <>
             <p className="text-sm text-ink-2">
               Anyone with this link can see the trip and add what they spent. They don't need an
-              account, and they can't see anything else in your Spendly.
+              account, and they can't see anything else in your Moneta.
             </p>
 
             <div className="flex items-center gap-2">
@@ -186,7 +186,7 @@ export function ShareTrip({ open, trip, onClose }: {
           <>
             <p className="text-sm text-ink-2">
               Send the rest of the group a link so they can add what they paid for. They don't need
-              an account — what they add lands in this trip, and nothing else in your Spendly is
+              an account — what they add lands in this trip, and nothing else in your Moneta is
               reachable through it.
             </p>
             <Button className="w-full" busy={busy} onClick={() => void create()}>

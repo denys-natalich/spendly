@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ChartPie, HandCoins, ListPlus, Plane, Plus, Settings as SettingsIcon, Tag, Wallet } from 'lucide-react'
+import { ChartPie, HandCoins, Plane, Plus, Settings as SettingsIcon, Wallet } from 'lucide-react'
 import { isConfigured } from './lib/supabase'
 import { useAppLock } from './lib/useAppLock'
 import { lockPromptSeen, markLockPromptSeen } from './lib/lock'
@@ -18,27 +18,34 @@ import { Debts } from './components/Debts'
 import { Setup } from './components/Setup'
 import { SyncPill } from './components/SyncStatus'
 import { Toaster } from './components/Toaster'
-import { Card, Spinner } from './components/ui'
+import { Card, Segmented, Spinner } from './components/ui'
 import { DEFAULT_FILTER, type ExpenseFilter, type ExpensesView } from './lib/filters'
 import type { Expense } from './types'
 
-type Tab = 'overview' | 'expenses' | 'travel' | 'debts' | 'categories' | 'settings'
+type Tab = 'expenses' | 'travel' | 'debts' | 'settings'
 
-// Overview sits in the middle of the tab bar — it's the home screen the app opens on.
-// Settings is left off the phone's bar (the avatar in the header opens it) so
-// the bar keeps an odd count and Overview stays centred.
+/** The personal ledger is one tab, switched between these three views. */
+type ExpensesSection = 'overview' | 'history' | 'categories'
+
+// Expenses sits in the middle of the tab bar — it's the home screen the app opens on.
+// Settings is left off the phone's bar; the avatar in the header opens it.
 const TABS: Array<{ id: Tab; label: string; icon: typeof ChartPie; inTabBar: boolean }> = [
-  { id: 'expenses', label: 'Expenses', icon: ListPlus, inTabBar: true },
   { id: 'travel', label: 'Travel', icon: Plane, inTabBar: true },
-  { id: 'overview', label: 'Overview', icon: ChartPie, inTabBar: true },
+  { id: 'expenses', label: 'Expenses', icon: ChartPie, inTabBar: true },
   { id: 'debts', label: 'Debts', icon: HandCoins, inTabBar: true },
-  { id: 'categories', label: 'Categories', icon: Tag, inTabBar: true },
   { id: 'settings', label: 'Settings', icon: SettingsIcon, inTabBar: false },
+]
+
+const SECTIONS: Array<{ value: ExpensesSection; label: string }> = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'history', label: 'History' },
+  { value: 'categories', label: 'Categories' },
 ]
 
 export default function App() {
   const { identity, authLoading, loading, error } = useStore()
-  const [tab, setTab] = useState<Tab>('overview')
+  const [tab, setTab] = useState<Tab>('expenses')
+  const [section, setSection] = useState<ExpensesSection>('overview')
   const [sheetOpen, setSheetOpen] = useState(false)
   const [editing, setEditing] = useState<Expense | null>(null)
   const [filter, setFilter] = useState<ExpenseFilter>(DEFAULT_FILTER)
@@ -77,6 +84,7 @@ export default function App() {
       query: '',
     })
     setExpensesView('days')
+    setSection('history')
     setTab('expenses')
   }
 
@@ -90,7 +98,7 @@ export default function App() {
           <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-accent text-accent-in">
             <Wallet size={16} />
           </span>
-          <span className="flex-1 font-semibold">Spendly</span>
+          <span className="flex-1 font-semibold">Moneta</span>
           <button
             type="button"
             onClick={() => setTab('settings')}
@@ -153,20 +161,32 @@ export default function App() {
             <Spinner label="Loading your expenses" />
           ) : (
             <>
-              {tab === 'overview' && <Overview onAdd={openNew} onOpenCategory={openCategory} />}
               {tab === 'expenses' && (
-                <Expenses
-                  filter={filter}
-                  onFilterChange={setFilter}
-                  view={expensesView}
-                  onViewChange={setExpensesView}
-                  onEdit={openEdit}
-                  onAdd={openNew}
-                />
+                <>
+                  <div className="mb-5 flex justify-center">
+                    <Segmented
+                      ariaLabel="Expenses view"
+                      value={section}
+                      onChange={setSection}
+                      options={SECTIONS}
+                    />
+                  </div>
+                  {section === 'overview' && <Overview onAdd={openNew} onOpenCategory={openCategory} />}
+                  {section === 'history' && (
+                    <Expenses
+                      filter={filter}
+                      onFilterChange={setFilter}
+                      view={expensesView}
+                      onViewChange={setExpensesView}
+                      onEdit={openEdit}
+                      onAdd={openNew}
+                    />
+                  )}
+                  {section === 'categories' && <Categories />}
+                </>
               )}
               {tab === 'travel' && <Travel />}
               {tab === 'debts' && <Debts />}
-              {tab === 'categories' && <Categories />}
               {tab === 'settings' && (
                 <Settings
                   lockEnabled={lock.enabled}
@@ -179,11 +199,11 @@ export default function App() {
         </main>
       </div>
 
-      {/* Mobile FAB — sits above the tab bar and the home indicator. Only on the
-          tabs where logging an expense is the primary action; Categories has its
-          own primary button and Settings has none. Travel brings its own, which
-          adds to the open trip rather than to the personal ledger. */}
-      {(tab === 'overview' || tab === 'expenses') && <button
+      {/* Mobile FAB — sits above the tab bar and the home indicator. Only where
+          logging an expense is the primary action; Categories has its own primary
+          button and Settings has none. Travel brings its own, which adds to the
+          open trip rather than to the personal ledger. */}
+      {tab === 'expenses' && section !== 'categories' && <button
         type="button"
         onClick={openNew}
         aria-label="Add expense"
@@ -197,7 +217,7 @@ export default function App() {
       {/* Mobile tab bar */}
       <nav
         aria-label="Sections"
-        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-surface/95
+        className="fixed inset-x-0 bottom-0 z-40 grid grid-cols-3 border-t border-line bg-surface/95
                    pb-[env(safe-area-inset-bottom)] backdrop-blur md:hidden"
       >
         {TABS.filter((t) => t.inTabBar).map(({ id, label, icon: Icon }) => (

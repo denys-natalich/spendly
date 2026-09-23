@@ -251,7 +251,7 @@ export function SharedTrip({ token }: { token: string }) {
           )}
           <p className="mt-3 px-1 text-xs leading-relaxed text-ink-3">
             Only what you added through this link can be edited here. Everything you add goes into
-            this trip in the organiser's Spendly, and works with no connection — it is sent when
+            this trip in the organiser's Moneta, and works with no connection — it is sent when
             there is one.
           </p>
         </section>

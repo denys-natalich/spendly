@@ -85,7 +85,7 @@ export async function enrollBiometric(accountLabel: string): Promise<boolean> {
     const credential = (await navigator.credentials.create({
       publicKey: {
         challenge: crypto.getRandomValues(new Uint8Array(32)),
-        rp: { name: 'Spendly', id: location.hostname },
+        rp: { name: 'Moneta', id: location.hostname },
         user: {
           id: crypto.getRandomValues(new Uint8Array(16)),
           name: accountLabel,

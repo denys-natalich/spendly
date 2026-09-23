@@ -12,9 +12,9 @@ export default defineConfig(({ command }) => ({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'Spendly — Expense Tracker',
-        short_name: 'Spendly',
-        description: 'Multi-currency expense tracking with live EUR/USD/UAH rates.',
+        name: 'Moneta — Money Management',
+        short_name: 'Moneta',
+        description: 'Money management — expenses, trips and debts, with live EUR/USD/UAH rates.',
         theme_color: '#1a1a19',
         background_color: '#121211',
         display: 'standalone',

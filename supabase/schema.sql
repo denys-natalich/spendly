@@ -1,5 +1,5 @@
 -- ============================================================================
--- Spendly — schema, row level security and seed data.
+-- Moneta — schema, row level security and seed data.
 -- Paste this whole file into the Supabase SQL editor and run it once.
 -- Safe to re-run: everything is guarded with "if not exists" / "or replace".
 -- ============================================================================
@@ -113,7 +113,7 @@ create table if not exists public.trips (
 create index if not exists trips_user_idx on public.trips (user_id, created_at desc);
 
 -- Travellers are names, not accounts: the people on the trip do not need to
--- have Spendly, and the trip belongs to whoever recorded it.
+-- have Moneta, and the trip belongs to whoever recorded it.
 create table if not exists public.travellers (
   id         uuid primary key default gen_random_uuid(),
   trip_id    uuid not null references public.trips (id) on delete cascade,
@@ -172,7 +172,7 @@ create policy "own trip expenses" on public.trip_expenses
 -- ---------------------------------------------------------------------------
 -- Shareable trips.
 --
--- A link holder is not a Spendly user and never becomes one. Everything they
+-- A link holder is not a Moneta user and never becomes one. Everything they
 -- can do goes through the four functions below, which run as the trip's owner
 -- (`security definer`) and take the link's token as their only credential.
 -- Row level security is never relaxed for them: the `anon` role cannot read or
