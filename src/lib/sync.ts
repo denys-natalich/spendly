@@ -168,7 +168,36 @@ function toRemote(table: SyncTable, row: SyncRow): Record<string, unknown> {
 
 async function outbox(): Promise<OutboxEntry[]> {
   const entries = await localAll<OutboxEntry>('outbox')
+  for (const entry of entries) {
+    if (renameLegacy(entry)) await localPut('outbox', entry)
+  }
   return entries.sort((a, b) => (a.seq ?? 0) - (b.seq ?? 0))
+}
+
+/*
+ * Changes queued by a build from before debt_entries, still waiting when the
+ * app updated. Their tables were folded into debt_entries on the server, so
+ * sent as they are they would be refused until dropped. Each is rewritten into
+ * the entry the migration made of it — same id, so a row the old build did get
+ * through is overwritten rather than doubled.
+ */
+const LEGACY: Record<string, { direction: 'plus' | 'minus'; dateColumn: string }> = {
+  debt_amounts: { direction: 'plus', dateColumn: 'added_on' },
+  debt_installments: { direction: 'minus', dateColumn: 'paid_on' },
+}
+
+/** Returns true when the entry was rewritten and needs saving. */
+function renameLegacy(entry: OutboxEntry): boolean {
+  const legacy = LEGACY[entry.table as string]
+  if (!legacy) return false
+  entry.table = 'debt_entries'
+  if (entry.payload) {
+    const { [legacy.dateColumn]: day, ...rest } = entry.payload
+    // An instalment from before currencies were per entry has none; the
+    // server migration falls back to EUR for the same rows.
+    entry.payload = { currency: 'EUR', ...rest, direction: legacy.direction, happened_on: day }
+  }
+  return true
 }
 
 async function refreshPending(): Promise<number> {
@@ -399,6 +428,7 @@ async function runFlush(): Promise<void> {
   }
 
   setState({ syncing: true })
+  const dropsBefore = drops
   try {
     await resolvePendingRates(queue)
 
@@ -464,7 +494,8 @@ async function runFlush(): Promise<void> {
 
     const lastSyncedAt = new Date().toISOString()
     try { localStorage.setItem(LAST_SYNCED_KEY, lastSyncedAt) } catch { /* private mode */ }
-    setState({ online: true, lastSyncedAt })
+    // A run that dropped nothing of its own clears an earlier run's refusal.
+    setState({ online: true, lastSyncedAt, ...(drops === dropsBefore ? { error: null } : {}) })
   } finally {
     setState({ syncing: false })
     await refreshPending()
@@ -496,11 +527,15 @@ async function pushShared(entry: OutboxEntry): Promise<'done' | 'offline' | 'kep
   }
 }
 
+/** Rows dropped for good since the app opened. */
+let drops = 0
+
 /** Returns true when the entry was dropped for good. */
 async function penalise(entry: OutboxEntry, message: string): Promise<boolean> {
   const attempts = entry.attempts + 1
   if (attempts >= MAX_ATTEMPTS) {
     await localDelete('outbox', entry.seq!)
+    drops++
     setState({ error: `A change could not be saved to the server: ${message}` })
     return true
   }
