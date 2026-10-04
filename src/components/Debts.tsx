@@ -1,21 +1,20 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, ChevronRight, HandCoins, Inbox, Pencil, Plus, Trash2 } from 'lucide-react'
+import { ArrowLeft, ChevronRight, HandCoins, Inbox, Minus, Pencil, Plus, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { dayLabel, money, symbolOf, today } from '../lib/format'
 import { toast } from '../lib/toast'
-import { BASE_CURRENCY, CURRENCIES, type Currency, type Debt, type DebtAmount, type DebtInstallment } from '../types'
+import { BASE_CURRENCY, CURRENCIES, type Currency, type Debt, type DebtDirection, type DebtEntry } from '../types'
 import { Button, Card, EmptyState, Field, SectionTitle, Segmented, Sheet, Spinner, inputClass } from './ui'
 
-/* Stable empty lists, so a debt with nothing recorded doesn't get a new array every render. */
-const NO_AMOUNTS: DebtAmount[] = []
-const NO_INSTALLMENTS: DebtInstallment[] = []
+/* Stable empty list, so a debt with nothing recorded doesn't get a new array every render. */
+const NO_ENTRIES: DebtEntry[] = []
 
 function parseAmount(raw: string): number {
   return Number(raw.replace(',', '.'))
 }
 
-function groupByDebt<T extends { debt_id: string }>(rows: T[]): Map<string, T[]> {
-  const map = new Map<string, T[]>()
+function groupByDebt(rows: DebtEntry[]): Map<string, DebtEntry[]> {
+  const map = new Map<string, DebtEntry[]>()
   for (const row of rows) {
     const list = map.get(row.debt_id)
     if (list) list.push(row)
@@ -36,10 +35,13 @@ interface Balance {
  * Where a debt stands, one line per currency it has anything in. Currencies
  * are never added together — each is paid down on its own.
  */
-function balancesOf(amounts: DebtAmount[], rows: DebtInstallment[]): Balance[] {
+function balancesOf(entries: DebtEntry[]): Balance[] {
   return CURRENCIES.flatMap((currency) => {
-    const owed = amounts.filter((a) => a.currency === currency).reduce((sum, a) => sum + a.amount, 0)
-    const paid = rows.filter((r) => r.currency === currency).reduce((sum, r) => sum + r.amount, 0)
+    const sum = (direction: DebtDirection) => entries
+      .filter((e) => e.currency === currency && e.direction === direction)
+      .reduce((total, e) => total + e.amount, 0)
+    const owed = sum('plus')
+    const paid = sum('minus')
     return owed === 0 && paid === 0 ? [] : [{ currency, owed, paid, left: owed - paid }]
   })
 }
@@ -61,13 +63,12 @@ function headline(balances: Balance[]): string {
 }
 
 export function Debts() {
-  const { debts, amounts, installments, debtsLoading, debtsError } = useStore()
+  const { debts, debtEntries, debtsLoading, debtsError } = useStore()
   const [openId, setOpenId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [editingDebt, setEditingDebt] = useState<Debt | null>(null)
 
-  const amountsByDebt = useMemo(() => groupByDebt(amounts), [amounts])
-  const rowsByDebt = useMemo(() => groupByDebt(installments), [installments])
+  const byDebt = useMemo(() => groupByDebt(debtEntries), [debtEntries])
 
   // Gone once deleted, which drops back to the list on its own.
   const open = debts.find((d) => d.id === openId) ?? null
@@ -79,8 +80,7 @@ export function Debts() {
       {open ? (
         <DebtDetail
           debt={open}
-          amounts={amountsByDebt.get(open.id) ?? NO_AMOUNTS}
-          rows={rowsByDebt.get(open.id) ?? NO_INSTALLMENTS}
+          entries={byDebt.get(open.id) ?? NO_ENTRIES}
           onBack={() => setOpenId(null)}
           onEdit={() => setEditingDebt(open)}
         />
@@ -112,9 +112,9 @@ export function Debts() {
           ) : (
             <Card className="divide-y divide-line overflow-hidden">
               {debts.map((d) => {
-                const lent = amountsByDebt.get(d.id) ?? NO_AMOUNTS
-                const rows = rowsByDebt.get(d.id) ?? NO_INSTALLMENTS
-                const balances = balancesOf(lent, rows)
+                const entries = byDebt.get(d.id) ?? NO_ENTRIES
+                const payments = entries.filter((e) => e.direction === 'minus').length
+                const balances = balancesOf(entries)
                 // A bar only means something in one currency; across several it would add € to ₴.
                 const single = balances.length === 1 ? balances[0] : null
                 return (
@@ -137,7 +137,7 @@ export function Debts() {
                         </span>
                       )}
                       <span className="tnum mt-1 block text-xs text-ink-3">
-                        {rows.length} {rows.length === 1 ? 'instalment' : 'instalments'}
+                        {payments} {payments === 1 ? 'instalment' : 'instalments'}
                         {balances.some((b) => b.owed > 0) &&
                           ` · of ${balances.filter((b) => b.owed > 0).map((b) => money(b.owed, b.currency)).join(' + ')}`}
                       </span>
@@ -161,33 +161,19 @@ export function Debts() {
   )
 }
 
-/** A line in a debt's history: money lent under it, or a payment towards it. */
-type Entry =
-  | { kind: 'amount'; day: string; row: DebtAmount }
-  | { kind: 'instalment'; day: string; row: DebtInstallment }
-
 /** One debt: what is left in each currency, and everything recorded against it. */
-function DebtDetail({ debt, amounts, rows, onBack, onEdit }: {
+function DebtDetail({ debt, entries, onBack, onEdit }: {
   debt: Debt
-  amounts: DebtAmount[]
-  rows: DebtInstallment[]
+  entries: DebtEntry[]
   onBack: () => void
   onEdit: () => void
 }) {
-  const [lending, setLending] = useState(false)
-  const [editingAmount, setEditingAmount] = useState<DebtAmount | null>(null)
-  const [paying, setPaying] = useState(false)
-  const [editingRow, setEditingRow] = useState<DebtInstallment | null>(null)
+  // The direction a new entry starts in; null while the sheet is closed.
+  const [adding, setAdding] = useState<DebtDirection | null>(null)
+  const [editing, setEditing] = useState<DebtEntry | null>(null)
 
-  const balances = useMemo(() => balancesOf(amounts, rows), [amounts, rows])
+  const balances = useMemo(() => balancesOf(entries), [entries])
   const owesAnything = balances.some((b) => !isSettled(b))
-
-  // Newest first; on the same day, the one entered last on top.
-  const history = useMemo<Entry[]>(() => [
-    ...amounts.map((row) => ({ kind: 'amount' as const, day: row.added_on, row })),
-    ...rows.map((row) => ({ kind: 'instalment' as const, day: row.paid_on, row })),
-  ].sort((a, b) => (a.day === b.day ? b.row.created_at.localeCompare(a.row.created_at) : b.day.localeCompare(a.day))),
-  [amounts, rows])
 
   return (
     <div className="space-y-5">
@@ -226,16 +212,12 @@ function DebtDetail({ debt, amounts, rows, onBack, onEdit }: {
         )}
 
         <div className="mt-4 flex gap-2">
-          <Button
-            variant={owesAnything ? 'subtle' : 'primary'}
-            className="flex-1"
-            onClick={() => { setEditingAmount(null); setLending(true) }}
-          >
+          <Button variant={owesAnything ? 'subtle' : 'primary'} className="flex-1" onClick={() => setAdding('plus')}>
             <Plus size={16} /> Add amount
           </Button>
           {owesAnything && (
-            <Button className="flex-1" onClick={() => { setEditingRow(null); setPaying(true) }}>
-              <Plus size={16} /> Instalment
+            <Button className="flex-1" onClick={() => setAdding('minus')}>
+              <Minus size={16} /> Instalment
             </Button>
           )}
         </div>
@@ -243,7 +225,7 @@ function DebtDetail({ debt, amounts, rows, onBack, onEdit }: {
 
       <section>
         <SectionTitle>History</SectionTitle>
-        {history.length === 0 ? (
+        {entries.length === 0 ? (
           <Card>
             <EmptyState
               icon={<Inbox size={32} />}
@@ -253,46 +235,34 @@ function DebtDetail({ debt, amounts, rows, onBack, onEdit }: {
           </Card>
         ) : (
           <Card className="divide-y divide-line overflow-hidden">
-            {history.map((e) => (
+            {entries.map((e) => (
               <button
-                key={e.row.id}
+                key={e.id}
                 type="button"
-                onClick={() => {
-                  if (e.kind === 'amount') { setEditingAmount(e.row); setLending(true) }
-                  else { setEditingRow(e.row); setPaying(true) }
-                }}
+                onClick={() => setEditing(e)}
                 className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-raised"
               >
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-medium">
-                    {e.row.description || (e.kind === 'amount' ? 'Amount owed' : 'Instalment')}
+                    {e.description || (e.direction === 'plus' ? 'Amount owed' : 'Instalment')}
                   </span>
-                  <span className="block text-xs text-ink-3">{dayLabel(e.day)}</span>
+                  <span className="block text-xs text-ink-3">{dayLabel(e.happened_on)}</span>
                 </span>
-                {e.kind === 'amount' ? (
-                  <span className="tnum shrink-0 text-sm font-semibold">+{money(e.row.amount, e.row.currency)}</span>
-                ) : (
-                  <span className="tnum shrink-0 text-sm font-semibold text-good">
-                    −{money(e.row.amount, e.row.currency)}
-                  </span>
-                )}
+                <span className={`tnum shrink-0 text-sm font-semibold ${e.direction === 'minus' ? 'text-good' : ''}`}>
+                  {e.direction === 'plus' ? '+' : '−'}{money(e.amount, e.currency)}
+                </span>
               </button>
             ))}
           </Card>
         )}
       </section>
 
-      <AmountSheet
-        debt={lending ? debt : null}
-        row={editingAmount}
-        onClose={() => { setLending(false); setEditingAmount(null) }}
-      />
-
-      <InstallmentSheet
-        debt={paying ? debt : null}
-        row={editingRow}
-        balances={balances}
-        onClose={() => { setPaying(false); setEditingRow(null) }}
+      <EntrySheet
+        debt={adding || editing ? debt : null}
+        row={editing}
+        direction={adding ?? 'plus'}
+        entries={entries}
+        onClose={() => { setAdding(null); setEditing(null) }}
       />
     </div>
   )
@@ -483,58 +453,80 @@ function DebtSheet({ open, debt, onClose, onCreated }: {
   )
 }
 
-/** Add money owed under a debt — the first amount or a later one — or edit / remove one. */
-function AmountSheet({ debt, row, onClose }: {
+/**
+ * Add an entry under a debt — money owed (+) or an instalment paying it down
+ * (−) — or edit / remove one. The direction can be switched on the sheet, so a
+ * payment entered as a loan by mistake is one tap to fix.
+ */
+function EntrySheet({ debt, row, direction: initial, entries, onClose }: {
   debt: Debt | null
-  row: DebtAmount | null
+  row: DebtEntry | null
+  /** The direction a new entry starts in. */
+  direction: DebtDirection
+  /** Everything under this debt, including the row being edited. */
+  entries: DebtEntry[]
   onClose: () => void
 }) {
-  const { amounts, addAmount, updateAmount, deleteAmount } = useStore()
+  const { addDebtEntry, updateDebtEntry, deleteDebtEntry } = useStore()
+  const [direction, setDirection] = useState<DebtDirection>('plus')
   const [amount, setAmount] = useState('')
   const [currency, setCurrency] = useState<Currency>(BASE_CURRENCY)
   const [description, setDescription] = useState('')
-  const [addedOn, setAddedOn] = useState(today())
+  const [day, setDay] = useState(today())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const open = debt !== null
+  // Balances as they would be without the row being edited.
+  const others = useMemo(() => balancesOf(row ? entries.filter((e) => e.id !== row.id) : entries), [entries, row])
 
   useEffect(() => {
     if (!open) return
-    // A new amount starts in the currency last used for this debt.
-    const last = amounts.find((a) => a.debt_id === debt?.id)
+    // A new amount starts in the currency last used; a new instalment in the first one still owed.
+    const start = initial === 'minus'
+      ? others.find((b) => !isSettled(b))?.currency
+      : entries.find((e) => e.direction === 'plus')?.currency
+    setDirection(row?.direction ?? initial)
     setAmount(row ? String(row.amount) : '')
-    setCurrency(row?.currency ?? last?.currency ?? BASE_CURRENCY)
+    setCurrency(row?.currency ?? start ?? others[0]?.currency ?? BASE_CURRENCY)
     setDescription(row?.description ?? '')
-    setAddedOn(row?.added_on ?? today())
+    setDay(row?.happened_on ?? today())
     setBusy(false)
     setError(null)
-    // Only on opening — not every time another amount changes underneath.
+    // Only on opening — the balances move as soon as this entry is saved.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, row])
+  }, [open, row, initial])
 
   if (!debt) return null
 
   const parsed = parseAmount(amount)
   const valid = Number.isFinite(parsed) && parsed > 0
+  const balance = others.find((b) => b.currency === currency)
+  // A payment can only go to a currency something is owed in; a loan to any.
+  const owedIn = others.filter((b) => b.owed > 0).map((b) => b.currency)
+  const choices = direction === 'minus' && owedIn.length > 0
+    ? CURRENCIES.filter((c) => owedIn.includes(c) || c === currency)
+    : CURRENCIES
 
   async function save() {
     if (!debt || !valid) return
     setBusy(true)
     setError(null)
     const draft = {
+      direction,
       amount: Number(parsed.toFixed(2)),
       currency,
       description: description.trim() || null,
-      added_on: addedOn,
+      happened_on: day,
     }
+    const noun = direction === 'plus' ? 'Amount' : 'Instalment'
     try {
-      if (row) await updateAmount(row.id, draft)
-      else await addAmount(debt.id, draft)
-      toast(row ? 'Amount updated' : 'Amount added')
+      if (row) await updateDebtEntry(row.id, draft)
+      else await addDebtEntry(debt.id, draft)
+      toast(row ? `${noun} updated` : direction === 'plus' ? 'Amount added' : 'Instalment recorded')
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save the amount.')
+      setError(e instanceof Error ? e.message : `Could not save the ${noun.toLowerCase()}.`)
       setBusy(false)
     }
   }
@@ -543,143 +535,38 @@ function AmountSheet({ debt, row, onClose }: {
     if (!row) return
     setBusy(true)
     try {
-      await deleteAmount(row.id)
-      toast('Amount deleted')
+      await deleteDebtEntry(row.id)
+      toast(row.direction === 'plus' ? 'Amount deleted' : 'Instalment deleted')
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not delete the amount.')
+      setError(e instanceof Error ? e.message : 'Could not delete the entry.')
       setBusy(false)
     }
   }
 
-  return (
-    <Sheet open={open} title={row ? 'Edit amount' : `Amount · ${debt.name}`} onClose={onClose}>
-      <div className="space-y-3.5">
-        <div className="flex items-end gap-3">
-          <AmountInput autoFocus={!row} value={amount} onChange={setAmount} currency={currency} label="Amount owed" />
-          <div className="shrink-0 pb-1">
-            <Segmented
-              compact
-              ariaLabel="Currency"
-              value={currency}
-              onChange={setCurrency}
-              options={CURRENCIES.map((c) => ({ value: c, label: c }))}
-            />
-          </div>
-        </div>
+  const left = balance?.left ?? 0
+  const after = direction === 'plus' ? left + (valid ? parsed : 0) : left - (valid ? parsed : 0)
 
-        <DetailsFields
-          description={description}
-          onDescription={setDescription}
-          placeholder="Description — lent for rent, phone on credit"
-          day={addedOn}
-          onDay={setAddedOn}
+  return (
+    <Sheet open={open} title={`${row ? 'Edit entry' : 'New entry'} · ${debt.name}`} onClose={onClose}>
+      <div className="space-y-3.5">
+        <Segmented
+          ariaLabel="Direction"
+          value={direction}
+          onChange={setDirection}
+          options={[
+            { value: 'plus', label: <span className="inline-flex items-center gap-1"><Plus size={14} /> Amount owed</span> },
+            { value: 'minus', label: <span className="inline-flex items-center gap-1"><Minus size={14} /> Instalment</span> },
+          ]}
         />
 
-        {error && <p className="text-sm text-danger">{error}</p>}
-
-        <div className="flex items-center gap-2">
-          <Button onClick={save} busy={busy} disabled={!valid} className="flex-1">
-            {row ? 'Save changes' : 'Add amount'}
-          </Button>
-          {row && (
-            <Button variant="danger" onClick={remove} aria-label="Delete amount">
-              <Trash2 size={16} />
-            </Button>
-          )}
-        </div>
-      </div>
-    </Sheet>
-  )
-}
-
-/** Record a payment towards a debt, or edit / remove one already recorded. */
-function InstallmentSheet({ debt, row, balances, onClose }: {
-  debt: Debt | null
-  row: DebtInstallment | null
-  /** Where the debt stands now, including the row being edited. */
-  balances: Balance[]
-  onClose: () => void
-}) {
-  const { addInstallment, updateInstallment, deleteInstallment } = useStore()
-  const [amount, setAmount] = useState('')
-  const [currency, setCurrency] = useState<Currency>(BASE_CURRENCY)
-  const [description, setDescription] = useState('')
-  const [paidOn, setPaidOn] = useState(today())
-  const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  const open = debt !== null
-
-  useEffect(() => {
-    if (!open) return
-    setAmount(row ? String(row.amount) : '')
-    // A new payment goes to the first currency still owed.
-    setCurrency(row?.currency ?? balances.find((b) => !isSettled(b))?.currency ?? balances[0]?.currency ?? BASE_CURRENCY)
-    setDescription(row?.description ?? '')
-    setPaidOn(row?.paid_on ?? today())
-    setBusy(false)
-    setError(null)
-    // Only on opening — the balances move as soon as this payment is saved.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, row])
-
-  if (!debt) return null
-
-  const balance = balances.find((b) => b.currency === currency)
-  const owed = balance?.owed ?? 0
-  // What is left before this payment — excluding the row being edited.
-  const remaining = (balance?.left ?? 0) + (row && row.currency === currency ? row.amount : 0)
-  const parsed = parseAmount(amount)
-  const valid = Number.isFinite(parsed) && parsed > 0
-  const after = remaining - (valid ? parsed : 0)
-  // Only the currencies something is owed in can be paid down.
-  const choices = balances.map((b) => b.currency)
-
-  async function save() {
-    if (!debt || !valid) return
-    setBusy(true)
-    setError(null)
-    const draft = {
-      amount: Number(parsed.toFixed(2)),
-      currency,
-      description: description.trim() || null,
-      paid_on: paidOn,
-    }
-    try {
-      if (row) await updateInstallment(row.id, draft)
-      else await addInstallment(debt.id, draft)
-      toast(row ? 'Instalment updated' : 'Instalment recorded')
-      onClose()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save the instalment.')
-      setBusy(false)
-    }
-  }
-
-  async function remove() {
-    if (!row) return
-    setBusy(true)
-    try {
-      await deleteInstallment(row.id)
-      toast('Instalment deleted')
-      onClose()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not delete the instalment.')
-      setBusy(false)
-    }
-  }
-
-  return (
-    <Sheet open={open} title={row ? 'Edit instalment' : `Instalment · ${debt.name}`} onClose={onClose}>
-      <div className="space-y-3.5">
         <div className="flex items-end gap-3">
           <AmountInput
             autoFocus={!row}
             value={amount}
             onChange={setAmount}
             currency={currency}
-            label="Instalment amount"
+            label={direction === 'plus' ? 'Amount owed' : 'Instalment amount'}
           />
           {choices.length > 1 && (
             <div className="shrink-0 pb-1">
@@ -697,25 +584,27 @@ function InstallmentSheet({ debt, row, balances, onClose }: {
         <p className="tnum -mt-1 text-right text-xs text-ink-3">
           {after < -0.005
             ? `${money(-after, currency)} more than is left`
-            : `Leaves ${money(Math.max(0, after), currency)} of ${money(owed, currency)}`}
+            : `${money(Math.max(0, after), currency)} left after this`}
         </p>
 
         <DetailsFields
           description={description}
           onDescription={setDescription}
-          placeholder="Description — September payment, bank transfer"
-          day={paidOn}
-          onDay={setPaidOn}
+          placeholder={direction === 'plus'
+            ? 'Description — lent for rent, phone on credit'
+            : 'Description — September payment, bank transfer'}
+          day={day}
+          onDay={setDay}
         />
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
         <div className="flex items-center gap-2">
           <Button onClick={save} busy={busy} disabled={!valid} className="flex-1">
-            {row ? 'Save changes' : 'Record instalment'}
+            {row ? 'Save changes' : direction === 'plus' ? 'Add amount' : 'Record instalment'}
           </Button>
           {row && (
-            <Button variant="danger" onClick={remove} aria-label="Delete instalment">
+            <Button variant="danger" onClick={remove} aria-label="Delete entry">
               <Trash2 size={16} />
             </Button>
           )}

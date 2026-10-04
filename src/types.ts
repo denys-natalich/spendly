@@ -87,10 +87,10 @@ export interface TripExpenseDraft {
 }
 
 /*
- * Debts. A debt is a name; what is owed is every amount recorded under it, and
- * each instalment is a payment that brings what is left down. Kept in its own
- * tables like travel: repaying a loan is not a spending category, and must not
- * move the monthly total.
+ * Debts. A debt is a name; everything recorded under it is an entry that
+ * either adds to what is owed or pays it down. Kept in its own tables like
+ * travel: repaying a loan is not a spending category, and must not move the
+ * monthly total.
  */
 export interface Debt {
   id: string
@@ -103,42 +103,28 @@ export interface DebtDraft {
   name: string
 }
 
-/** Money lent under a debt — the first time, or again later. */
-export interface DebtAmount {
+/** `plus` adds to what is owed — money lent; `minus` pays it down — an instalment. */
+export type DebtDirection = 'plus' | 'minus'
+
+/** One line in a debt's history, counted in its own currency only. */
+export interface DebtEntry {
   id: string
   user_id: string
   debt_id: string
+  direction: DebtDirection
   amount: number
   currency: Currency
   description: string | null
-  added_on: string // YYYY-MM-DD
+  happened_on: string // YYYY-MM-DD
   created_at: string
 }
 
-export interface DebtAmountDraft {
+export interface DebtEntryDraft {
+  direction: DebtDirection
   amount: number
   currency: Currency
   description: string | null
-  added_on: string
-}
-
-/** One payment towards a debt, taken off what is owed in its own currency. */
-export interface DebtInstallment {
-  id: string
-  user_id: string
-  debt_id: string
-  amount: number
-  currency: Currency
-  description: string | null
-  paid_on: string // YYYY-MM-DD
-  created_at: string
-}
-
-export interface DebtInstallmentDraft {
-  amount: number
-  currency: Currency
-  description: string | null
-  paid_on: string
+  happened_on: string
 }
 
 /** Units of each currency per 1 EUR on a given day. EUR is always 1. */
