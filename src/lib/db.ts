@@ -16,7 +16,7 @@
  */
 
 const DB_NAME = 'spendly'
-const DB_VERSION = 4
+const DB_VERSION = 5
 
 export type LocalStore =
   | 'categories'
@@ -25,8 +25,7 @@ export type LocalStore =
   | 'travellers'
   | 'trip_expenses'
   | 'debts'
-  | 'debt_amounts'
-  | 'debt_installments'
+  | 'debt_entries'
   | 'fx_rates'
   | 'shared_trips'
   | 'outbox'
@@ -39,8 +38,7 @@ const SCHEMA: Record<LocalStore, IDBObjectStoreParameters> = {
   travellers: { keyPath: 'id' },
   trip_expenses: { keyPath: 'id' },
   debts: { keyPath: 'id' },
-  debt_amounts: { keyPath: 'id' },
-  debt_installments: { keyPath: 'id' },
+  debt_entries: { keyPath: 'id' },
   fx_rates: { keyPath: 'day' },
   // One record per share link opened on this device: the whole trip as it was
   // last seen. Kept apart from the account's own stores above — a link holder
@@ -52,8 +50,14 @@ const SCHEMA: Record<LocalStore, IDBObjectStoreParameters> = {
   meta: { keyPath: 'key' },
 }
 
+/**
+ * Stores an earlier version kept and this one no longer reads. Their rows were
+ * moved on the server, and come back in their new shape with the next pull.
+ */
+const RETIRED = ['debt_installments', 'debt_amounts']
+
 /** The stores that hold rows belonging to one signed-in user. */
-export const USER_STORES = ['categories', 'expenses', 'trips', 'travellers', 'trip_expenses', 'debts', 'debt_amounts', 'debt_installments'] as const
+export const USER_STORES = ['categories', 'expenses', 'trips', 'travellers', 'trip_expenses', 'debts', 'debt_entries'] as const
 
 let opening: Promise<IDBDatabase | null> | null = null
 
@@ -71,6 +75,9 @@ function openDb(): Promise<IDBDatabase | null> {
       const db = request.result
       for (const [name, options] of Object.entries(SCHEMA)) {
         if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, options)
+      }
+      for (const name of RETIRED) {
+        if (db.objectStoreNames.contains(name)) db.deleteObjectStore(name)
       }
     }
     request.onsuccess = () => resolve(request.result)

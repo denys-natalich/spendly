@@ -441,9 +441,9 @@ grant execute on function public.share_delete_expense(text, uuid) to anon, authe
 grant execute on function public.share_add_traveller(text, text) to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
--- Debts — a name, the amounts owed under it, and the instalments that pay
--- them down. The end state of 2026-09-debts.sql and 2026-10-debt-amounts.sql;
--- see those for the reasoning.
+-- Debts — a name, and one list of entries under it: a "plus" adds to what is
+-- owed, a "minus" pays it down. The end state of 2026-09-debts.sql and
+-- 2026-10-debt-entries.sql; see those for the reasoning.
 -- ---------------------------------------------------------------------------
 create table if not exists public.debts (
   id         uuid primary key default gen_random_uuid(),
@@ -454,41 +454,26 @@ create table if not exists public.debts (
 
 create index if not exists debts_user_idx on public.debts (user_id, created_at desc);
 
--- Each amount is in its own currency, so one name can be owed in several.
-create table if not exists public.debt_amounts (
+-- Each entry is in its own currency, and balances are kept per currency —
+-- a loan in hryvnia is repaid in hryvnia — so there is no rate to snapshot.
+-- What is left is worked out by the app rather than stored.
+create table if not exists public.debt_entries (
   id          uuid primary key default gen_random_uuid(),
   user_id     uuid not null references auth.users (id) on delete cascade,
   debt_id     uuid not null references public.debts (id) on delete cascade,
+  direction   text not null check (direction in ('plus', 'minus')),
   amount      numeric(14, 2) not null check (amount > 0),
   currency    text not null check (currency in ('EUR', 'USD', 'UAH')),
   description text check (char_length(description) <= 200),
-  added_on    date not null default current_date,
+  happened_on date not null default current_date,
   created_at  timestamptz not null default now()
 );
 
-create index if not exists debt_amounts_debt_idx on public.debt_amounts (debt_id, added_on desc);
-create index if not exists debt_amounts_user_idx on public.debt_amounts (user_id);
+create index if not exists debt_entries_debt_idx on public.debt_entries (debt_id, happened_on desc);
+create index if not exists debt_entries_user_idx on public.debt_entries (user_id);
 
--- An instalment pays down the balance in its own currency — a loan in hryvnia
--- is repaid in hryvnia — so there is no rate to snapshot. What is left is
--- worked out by the app rather than stored.
-create table if not exists public.debt_installments (
-  id          uuid primary key default gen_random_uuid(),
-  user_id     uuid not null references auth.users (id) on delete cascade,
-  debt_id     uuid not null references public.debts (id) on delete cascade,
-  amount      numeric(14, 2) not null check (amount > 0),
-  currency    text not null check (currency in ('EUR', 'USD', 'UAH')),
-  description text check (char_length(description) <= 200),
-  paid_on     date not null default current_date,
-  created_at  timestamptz not null default now()
-);
-
-create index if not exists debt_installments_debt_idx on public.debt_installments (debt_id, paid_on desc);
-create index if not exists debt_installments_user_idx on public.debt_installments (user_id);
-
-alter table public.debts             enable row level security;
-alter table public.debt_amounts      enable row level security;
-alter table public.debt_installments enable row level security;
+alter table public.debts        enable row level security;
+alter table public.debt_entries enable row level security;
 
 drop policy if exists "own debts" on public.debts;
 create policy "own debts" on public.debts
@@ -496,14 +481,8 @@ create policy "own debts" on public.debts
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-drop policy if exists "own debt amounts" on public.debt_amounts;
-create policy "own debt amounts" on public.debt_amounts
-  for all to authenticated
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
-
-drop policy if exists "own debt installments" on public.debt_installments;
-create policy "own debt installments" on public.debt_installments
+drop policy if exists "own debt entries" on public.debt_entries;
+create policy "own debt entries" on public.debt_entries
   for all to authenticated
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);

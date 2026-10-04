@@ -3,7 +3,7 @@ import { supabase } from './supabase'
 import { localAll, localDelete, localDeleteMany, localPut, localReplaceUser } from './db'
 import { applyPending, dropQueuedFor, flush, queueDelete, queueUpsert } from './sync'
 import { newId } from './ids'
-import type { Currency, Debt, DebtAmount, DebtAmountDraft, DebtDraft, DebtInstallment, DebtInstallmentDraft } from '../types'
+import type { Debt, DebtDraft, DebtEntry, DebtEntryDraft } from '../types'
 
 /**
  * Everything the Debts tab reads and writes.
@@ -14,19 +14,16 @@ import type { Currency, Debt, DebtAmount, DebtAmountDraft, DebtDraft, DebtInstal
  */
 export interface DebtStore {
   debts: Debt[]
-  amounts: DebtAmount[]
-  installments: DebtInstallment[]
+  /** Every entry under every debt, most recent first. */
+  debtEntries: DebtEntry[]
   debtsLoading: boolean
   debtsError: string | null
   createDebt: (draft: DebtDraft) => Promise<Debt>
   updateDebt: (id: string, draft: DebtDraft) => Promise<void>
   deleteDebt: (id: string) => Promise<void>
-  addAmount: (debtId: string, draft: DebtAmountDraft) => Promise<void>
-  updateAmount: (id: string, draft: DebtAmountDraft) => Promise<void>
-  deleteAmount: (id: string) => Promise<void>
-  addInstallment: (debtId: string, draft: DebtInstallmentDraft) => Promise<void>
-  updateInstallment: (id: string, draft: DebtInstallmentDraft) => Promise<void>
-  deleteInstallment: (id: string) => Promise<void>
+  addDebtEntry: (debtId: string, draft: DebtEntryDraft) => Promise<void>
+  updateDebtEntry: (id: string, draft: DebtEntryDraft) => Promise<void>
+  deleteDebtEntry: (id: string) => Promise<void>
 }
 
 function hydrateDebt(row: Record<string, unknown>): Debt {
@@ -34,33 +31,20 @@ function hydrateDebt(row: Record<string, unknown>): Debt {
   return { id, user_id, name, created_at }
 }
 
-function hydrateAmount(row: Record<string, unknown>): DebtAmount {
-  return { ...(row as unknown as DebtAmount), amount: Number(row.amount ?? 0) }
+function hydrateEntry(row: Record<string, unknown>): DebtEntry {
+  return { ...(row as unknown as DebtEntry), amount: Number(row.amount ?? 0) }
 }
-
-/**
- * Instalments cached before they carried a currency took their debt's, which
- * the debt row of that time still holds — `legacy` maps one to the other.
- */
-function hydrateInstallment(row: Record<string, unknown>, legacy?: Map<string, Currency>): DebtInstallment {
-  const currency = (row.currency as Currency | null | undefined) ?? legacy?.get(row.debt_id as string) ?? 'EUR'
-  return { ...(row as unknown as DebtInstallment), amount: Number(row.amount ?? 0), currency }
-}
-
-const hydrateRow = (row: Record<string, unknown>) => hydrateInstallment(row)
 
 export function useDebts(userId: string | null, canSync: boolean): DebtStore {
   const [debts, setDebts] = useState<Debt[]>([])
-  const [amounts, setAmounts] = useState<DebtAmount[]>([])
-  const [installments, setInstallments] = useState<DebtInstallment[]>([])
+  const [debtEntries, setDebtEntries] = useState<DebtEntry[]>([])
   const [debtsLoading, setDebtsLoading] = useState(false)
   const [debtsError, setDebtsError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!userId) {
       setDebts([])
-      setAmounts([])
-      setInstallments([])
+      setDebtEntries([])
       return
     }
 
@@ -73,18 +57,15 @@ export function useDebts(userId: string | null, canSync: boolean): DebtStore {
       let cachedAnything = false
 
       try {
-        const [d, a, i] = await Promise.all([
+        const [d, e] = await Promise.all([
           localAll<Record<string, unknown>>('debts'),
-          localAll<Record<string, unknown>>('debt_amounts'),
-          localAll<Record<string, unknown>>('debt_installments'),
+          localAll<Record<string, unknown>>('debt_entries'),
         ])
         if (cancelled) return
-        const legacy = new Map(d.filter((r) => r.currency).map((r) => [r.id as string, r.currency as Currency]))
         const localDebts = mine(d.map(hydrateDebt))
         cachedAnything = localDebts.length > 0
         setDebts(localDebts.sort(byNewest))
-        setAmounts(sortAmounts(mine(a.map(hydrateAmount))))
-        setInstallments(sortInstallments(mine(i.map((r) => hydrateInstallment(r, legacy)))))
+        setDebtEntries(sortEntries(mine(e.map(hydrateEntry))))
       } catch {
         /* Nothing cached yet — the server pull below covers it. */
       } finally {
@@ -95,32 +76,25 @@ export function useDebts(userId: string | null, canSync: boolean): DebtStore {
 
       try {
         await flush()
-        const [d, a, i] = await Promise.all([
+        const [d, e] = await Promise.all([
           supabase.from('debts').select('*').order('created_at', { ascending: false }),
-          supabase.from('debt_amounts').select('*').order('added_on', { ascending: false }),
-          supabase.from('debt_installments').select('*').order('paid_on', { ascending: false }),
+          supabase.from('debt_entries').select('*').order('happened_on', { ascending: false }),
         ])
         if (d.error) throw d.error
-        if (a.error) throw a.error
-        if (i.error) throw i.error
+        if (e.error) throw e.error
         if (cancelled) return
 
         const freshDebts = await applyPending<Debt>(
           'debts', userId, (d.data ?? []).map(hydrateDebt), hydrateDebt,
         )
-        const freshAmounts = await applyPending<DebtAmount>(
-          'debt_amounts', userId, (a.data ?? []).map(hydrateAmount), hydrateAmount,
-        )
-        const freshRows = await applyPending<DebtInstallment>(
-          'debt_installments', userId, (i.data ?? []).map(hydrateRow), hydrateRow,
+        const freshEntries = await applyPending<DebtEntry>(
+          'debt_entries', userId, (e.data ?? []).map(hydrateEntry), hydrateEntry,
         )
 
         setDebts(freshDebts.sort(byNewest))
-        setAmounts(sortAmounts(freshAmounts))
-        setInstallments(sortInstallments(freshRows))
+        setDebtEntries(sortEntries(freshEntries))
         void localReplaceUser('debts', userId, freshDebts)
-        void localReplaceUser('debt_amounts', userId, freshAmounts)
-        void localReplaceUser('debt_installments', userId, freshRows)
+        void localReplaceUser('debt_entries', userId, freshEntries)
       } catch (err) {
         if (!cancelled && !cachedAnything) {
           setDebtsError(err instanceof Error ? err.message : 'Could not load your debts.')
@@ -151,88 +125,52 @@ export function useDebts(userId: string | null, canSync: boolean): DebtStore {
 
   const deleteDebt = useCallback<DebtStore['deleteDebt']>(async (id) => {
     if (!userId) return
-    const lent = amounts.filter((r) => r.debt_id === id).map((r) => r.id)
-    const rows = installments.filter((r) => r.debt_id === id).map((r) => r.id)
+    const rows = debtEntries.filter((r) => r.debt_id === id).map((r) => r.id)
 
-    // Amounts and instalments go with it in the database (ON DELETE CASCADE);
-    // drop them from the queue too, or an unsent one would be refused by the
-    // foreign key.
+    // Entries go with it in the database (ON DELETE CASCADE); drop them from
+    // the queue too, or an unsent one would be refused by the foreign key.
     setDebts((prev) => prev.filter((d) => d.id !== id))
-    setAmounts((prev) => prev.filter((r) => r.debt_id !== id))
-    setInstallments((prev) => prev.filter((r) => r.debt_id !== id))
+    setDebtEntries((prev) => prev.filter((r) => r.debt_id !== id))
     await localDelete('debts', id)
-    await localDeleteMany('debt_amounts', lent)
-    await localDeleteMany('debt_installments', rows)
-    await dropQueuedFor('debt_amounts', 'debt_id', id)
-    await dropQueuedFor('debt_installments', 'debt_id', id)
+    await localDeleteMany('debt_entries', rows)
+    await dropQueuedFor('debt_entries', 'debt_id', id)
     await queueDelete('debts', userId, id)
-  }, [userId, amounts, installments])
+  }, [userId, debtEntries])
 
-  const addAmount = useCallback<DebtStore['addAmount']>(async (debtId, draft) => {
+  const addDebtEntry = useCallback<DebtStore['addDebtEntry']>(async (debtId, draft) => {
     if (!userId) return
-    const row: DebtAmount = {
+    const row: DebtEntry = {
       id: newId(),
       user_id: userId,
       debt_id: debtId,
       ...draft,
       created_at: new Date().toISOString(),
     }
-    setAmounts((prev) => sortAmounts([row, ...prev]))
-    await localPut('debt_amounts', row)
-    await queueUpsert('debt_amounts', row)
+    setDebtEntries((prev) => sortEntries([row, ...prev]))
+    await localPut('debt_entries', row)
+    await queueUpsert('debt_entries', row)
   }, [userId])
 
-  const updateAmount = useCallback<DebtStore['updateAmount']>(async (id, draft) => {
-    const current = amounts.find((r) => r.id === id)
+  const updateDebtEntry = useCallback<DebtStore['updateDebtEntry']>(async (id, draft) => {
+    const current = debtEntries.find((r) => r.id === id)
     if (!current) return
-    const row: DebtAmount = { ...current, ...draft }
-    setAmounts((prev) => sortAmounts(prev.map((r) => (r.id === id ? row : r))))
-    await localPut('debt_amounts', row)
-    await queueUpsert('debt_amounts', row)
-  }, [amounts])
+    const row: DebtEntry = { ...current, ...draft }
+    setDebtEntries((prev) => sortEntries(prev.map((r) => (r.id === id ? row : r))))
+    await localPut('debt_entries', row)
+    await queueUpsert('debt_entries', row)
+  }, [debtEntries])
 
-  const deleteAmount = useCallback<DebtStore['deleteAmount']>(async (id) => {
+  const deleteDebtEntry = useCallback<DebtStore['deleteDebtEntry']>(async (id) => {
     if (!userId) return
-    setAmounts((prev) => prev.filter((r) => r.id !== id))
-    await localDelete('debt_amounts', id)
-    await queueDelete('debt_amounts', userId, id)
-  }, [userId])
-
-  const addInstallment = useCallback<DebtStore['addInstallment']>(async (debtId, draft) => {
-    if (!userId) return
-    const row: DebtInstallment = {
-      id: newId(),
-      user_id: userId,
-      debt_id: debtId,
-      ...draft,
-      created_at: new Date().toISOString(),
-    }
-    setInstallments((prev) => sortInstallments([row, ...prev]))
-    await localPut('debt_installments', row)
-    await queueUpsert('debt_installments', row)
-  }, [userId])
-
-  const updateInstallment = useCallback<DebtStore['updateInstallment']>(async (id, draft) => {
-    const current = installments.find((r) => r.id === id)
-    if (!current) return
-    const row: DebtInstallment = { ...current, ...draft }
-    setInstallments((prev) => sortInstallments(prev.map((r) => (r.id === id ? row : r))))
-    await localPut('debt_installments', row)
-    await queueUpsert('debt_installments', row)
-  }, [installments])
-
-  const deleteInstallment = useCallback<DebtStore['deleteInstallment']>(async (id) => {
-    if (!userId) return
-    setInstallments((prev) => prev.filter((r) => r.id !== id))
-    await localDelete('debt_installments', id)
-    await queueDelete('debt_installments', userId, id)
+    setDebtEntries((prev) => prev.filter((r) => r.id !== id))
+    await localDelete('debt_entries', id)
+    await queueDelete('debt_entries', userId, id)
   }, [userId])
 
   return {
-    debts, amounts, installments, debtsLoading, debtsError,
+    debts, debtEntries, debtsLoading, debtsError,
     createDebt, updateDebt, deleteDebt,
-    addAmount, updateAmount, deleteAmount,
-    addInstallment, updateInstallment, deleteInstallment,
+    addDebtEntry, updateDebtEntry, deleteDebtEntry,
   }
 }
 
@@ -240,16 +178,11 @@ function byNewest(a: Debt, b: Debt): number {
   return b.created_at.localeCompare(a.created_at)
 }
 
-/** Most recently lent first. */
-function sortAmounts(list: DebtAmount[]): DebtAmount[] {
+/** Newest first; on the same day, the one entered last on top. */
+function sortEntries(list: DebtEntry[]): DebtEntry[] {
   return [...list].sort((a, b) =>
-    a.added_on === b.added_on ? b.created_at.localeCompare(a.created_at) : b.added_on.localeCompare(a.added_on),
-  )
-}
-
-/** Most recent payment first. */
-function sortInstallments(list: DebtInstallment[]): DebtInstallment[] {
-  return [...list].sort((a, b) =>
-    a.paid_on === b.paid_on ? b.created_at.localeCompare(a.created_at) : b.paid_on.localeCompare(a.paid_on),
+    a.happened_on === b.happened_on
+      ? b.created_at.localeCompare(a.created_at)
+      : b.happened_on.localeCompare(a.happened_on),
   )
 }
