@@ -27,7 +27,7 @@ import type { Currency, DayRates } from '../types'
  */
 
 export type SyncTable =
-  | 'categories' | 'expenses' | 'trips' | 'travellers' | 'trip_expenses' | 'debts' | 'debt_installments'
+  | 'categories' | 'expenses' | 'trips' | 'travellers' | 'trip_expenses' | 'debts' | 'debt_amounts' | 'debt_installments'
 
 export interface OutboxEntry {
   /** Assigned by IndexedDB; the replay order. */
@@ -64,8 +64,9 @@ const COLUMNS: Record<SyncTable, readonly string[]> = {
   trips: ['id', 'user_id', 'name', 'created_at'],
   travellers: ['id', 'trip_id', 'user_id', 'name', 'created_at'],
   trip_expenses: ['id', 'user_id', 'trip_id', 'traveller_id', 'amount', 'currency', 'rate_to_eur', 'spent_on', 'note', 'created_at'],
-  debts: ['id', 'user_id', 'name', 'amount', 'currency', 'created_at'],
-  debt_installments: ['id', 'user_id', 'debt_id', 'amount', 'description', 'paid_on', 'created_at'],
+  debts: ['id', 'user_id', 'name', 'created_at'],
+  debt_amounts: ['id', 'user_id', 'debt_id', 'amount', 'currency', 'description', 'added_on', 'created_at'],
+  debt_installments: ['id', 'user_id', 'debt_id', 'amount', 'currency', 'description', 'paid_on', 'created_at'],
 }
 
 /** Rows per request when replaying a backlog, matching the import batch size. */

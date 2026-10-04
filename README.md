@@ -17,8 +17,9 @@ read back in any of the three currencies from a switch on the overview.
   owes. Travel money is held in its own tables, so it never reaches the overview, the categories or
   the trend. A trip can be **shared by link**, so the rest of the group can add what they spent
   without an account of their own.
-- **Debts** — a named amount owed, and the instalments recorded against it; each one brings what is
-  left down. Held in its own tables, so repayments never reach your expense totals.
+- **Debts** — a debt is a name; add each amount owed under it (in any of the three currencies, with
+  a description and date), and record instalments that bring what is left down in that currency.
+  Held in its own tables, so repayments never reach your expense totals.
 - **Categories** — eight to start with; add your own with an icon. The colour is the app's to give.
 - **Settings** — profile photo, password, app lock, Monefy import, theme, today's rates, sync, account.
 
@@ -41,8 +42,8 @@ IndexedDB for the local copy.
 ### 2. Create the tables
 
 Open **SQL Editor → New query**, paste the entire contents of [`supabase/schema.sql`](supabase/schema.sql),
-and run it. It creates nine tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
-`trip_expenses`, `trip_shares` for the Travel section, `debts`, `debt_installments` for Debts), turns on row level security, adds policies so
+and run it. It creates ten tables (`categories`, `expenses`, `fx_rates`, and `trips`, `travellers`,
+`trip_expenses`, `trip_shares` for the Travel section, `debts`, `debt_amounts`, `debt_installments` for Debts), turns on row level security, adds policies so
 you can only ever read and write your own rows, and defines the four functions a shared trip's link
 holder goes through.
 
@@ -53,6 +54,7 @@ Safe to re-run — every statement is guarded. **Upgrading an existing project:*
 | the Travel section | [`supabase/2026-09-travel.sql`](supabase/2026-09-travel.sql) |
 | shared trips | [`supabase/2026-09-trip-sharing.sql`](supabase/2026-09-trip-sharing.sql) |
 | the Debts section | [`supabase/2026-09-debts.sql`](supabase/2026-09-debts.sql) |
+| amounts under a debt | [`supabase/2026-10-debt-amounts.sql`](supabase/2026-10-debt-amounts.sql) |
 
 Each adds only what is new and touches nothing that already holds data.
 
@@ -372,7 +374,7 @@ src/
     avatar.ts          crop/scale, private-bucket upload, signed URL
     convert.ts         restates expenses in the display currency
     useTravel.ts       trips, travellers and trip expenses — their own store
-    useDebts.ts        debts and the instalments paid against them — their own store
+    useDebts.ts        debts, the amounts owed and the instalments paid — their own store
     useAppLock.ts      locks on leaving the foreground
   components/
     Overview.tsx  Expenses.tsx  Categories.tsx  Settings.tsx
@@ -393,6 +395,7 @@ supabase/avatars.sql   private avatar bucket + storage policies
 supabase/2026-09-travel.sql  travel tables, for a project created before them
 supabase/2026-09-trip-sharing.sql  share links + the functions a link holder calls
 supabase/2026-09-debts.sql   debt tables, for a project created before them
+supabase/2026-10-debt-amounts.sql  amounts under a debt; moves each debt's total into its first one
 ```
 
 ### Chart colours
